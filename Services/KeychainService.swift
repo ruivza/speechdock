@@ -23,18 +23,26 @@ final class KeychainService {
             throw KeychainError.invalidData
         }
 
-        // Delete existing item first (using unlocked version to avoid deadlock)
-        try? _deleteUnlocked(key: key)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+            kSecAttrAccount as String: key
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+
+        // Add first; fall back to update if the item already exists
+        // (avoids the non-atomic delete-then-add losing the existing key on failure)
+        var status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            let attributes: [String: Any] = [
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+            ]
+            status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        }
         guard status == errSecSuccess else {
             throw KeychainError.unhandledError(status: status)
         }
@@ -55,9 +63,19 @@ final class KeychainService {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
 
-        guard status == errSecSuccess,
-              let data = item as? Data,
+        // Only "not found" means absence; other errors (e.g. keychain locked)
+        // are logged so they can be distinguished from a missing item
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess else {
+            dprint("KeychainService: retrieve failed for key '\(key)' (status \(status))")
+            return nil
+        }
+
+        guard let data = item as? Data,
               let value = String(data: data, encoding: .utf8) else {
+            dprint("KeychainService: stored data for key '\(key)' is not valid UTF-8")
             return nil
         }
 

@@ -120,7 +120,8 @@ final class AccessibilityTextInsertionService {
 
         if result == .success {
             // Move cursor to end of inserted text
-            let newCursorPosition = newText.count
+            // AXSelectedTextRange uses UTF-16 (NSString) based indices
+            let newCursorPosition = (newText as NSString).length
             setCursorPosition(focusedElement, position: newCursorPosition)
             return true
         }

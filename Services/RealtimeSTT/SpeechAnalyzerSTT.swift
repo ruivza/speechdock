@@ -39,13 +39,18 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
 
     private var transcriber: SpeechTranscriber?
     private var analyzer: SpeechAnalyzer?
-    private var analyzerFormat: AVAudioFormat?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
 
     // MARK: - Audio Components
 
     private var audioEngine: AVAudioEngine?
-    private var audioConverter: AVAudioConverter?
+
+    // Serial audio buffer pipeline. The tap/processAudioBuffer enqueue buffers
+    // into this stream and a single consumer task converts and forwards them to
+    // the analyzer, so buffer order is guaranteed and conversion runs off the
+    // main actor.
+    private var bufferContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var bufferTask: Task<Void, Never>?
 
     // MARK: - Pre-buffer for initial audio
 
@@ -60,6 +65,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
     private var accumulatedTranscription = ""  // Accumulated final transcriptions
     private var resultsTask: Task<Void, Never>?
     private let audioLevelMonitor = AudioLevelMonitor.shared
+    private var sessionID = 0  // Incremented per session to invalidate stale async work
 
     // MARK: - Initialization
 
@@ -72,6 +78,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
     func startListening() async throws {
         // Stop any existing session
         stopListening()
+        sessionID &+= 1
 
         #if DEBUG
         let startTime = Date()
@@ -115,20 +122,17 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
 
         // Initialize SpeechTranscriber for live transcription
         // Using reportingOptions: [.volatileResults, .fastResults] for fastest real-time results
-        transcriber = SpeechTranscriber(
+        let transcriber = SpeechTranscriber(
             locale: locale,
             transcriptionOptions: [],
             reportingOptions: [.volatileResults, .fastResults],
             attributeOptions: []
         )
+        self.transcriber = transcriber
 
         #if DEBUG
         debugLog("SpeechAnalyzerSTT: Transcriber created in \(Date().timeIntervalSince(startTime))s")
         #endif
-
-        guard let transcriber = transcriber else {
-            throw RealtimeSTTError.serviceUnavailable("Failed to create SpeechTranscriber")
-        }
 
         // Verify the locale is supported, then auto-download its language model if
         // missing. assetInstallationRequest(supporting:) returns nil when assets are
@@ -149,16 +153,11 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         }
 
         // Initialize SpeechAnalyzer with the transcriber module
-        analyzer = SpeechAnalyzer(modules: [transcriber])
-
-        guard let analyzer = analyzer else {
-            throw RealtimeSTTError.serviceUnavailable("Failed to create SpeechAnalyzer")
-        }
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        self.analyzer = analyzer
 
         // Get the best available audio format for the transcriber
-        analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
-
-        guard analyzerFormat != nil else {
+        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
             throw RealtimeSTTError.audioError("Failed to get analyzer audio format")
         }
 
@@ -169,6 +168,13 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         // Create AsyncStream for audio input
         let (inputSequence, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         inputContinuation = continuation
+
+        // Start the serial buffer pipeline
+        let (bufferStream, bufferContinuation) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+        self.bufferContinuation = bufferContinuation
+        bufferTask = Task.detached { [weak self] in
+            await self?.runBufferPipeline(bufferStream, format: analyzerFormat, continuation: continuation)
+        }
 
         // Start results monitoring task
         startResultsMonitoring()
@@ -188,12 +194,18 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         #endif
     }
 
+    private var finalizationTask: Task<Void, Never>?
+
+    func finishListening() async {
+        if isListening { stopListening() }
+        await finalizationTask?.value
+    }
+
     func stopListening() {
         // Stop audio engine
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine = nil
-        audioConverter = nil
         audioLevelMonitor.stop()
 
         // Clear pre-buffer
@@ -202,37 +214,51 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         isPreBuffering = false
         preBufferLock.unlock()
 
-        // Finish the input stream
-        inputContinuation?.finish()
+        // Finish the buffer pipeline (enqueued buffers drain, then it terminates)
+        bufferContinuation?.finish()
+        bufferContinuation = nil
+        let pipeline = bufferTask
+        bufferTask = nil
+
+        // Finish analyzer input after the queued audio buffers have drained.
+        let continuation = inputContinuation
         inputContinuation = nil
 
-        // Cancel results monitoring task
-        resultsTask?.cancel()
-        resultsTask = nil
-
-        // Finalize the analyzer asynchronously (required by API)
+        // Finalize the analyzer asynchronously (required by API). Finalize first
+        // and let the results task drain the final segments produced by
+        // finalization before cancelling it — cancelling first would lose them.
+        let session = sessionID
         let analyzerToFinalize = analyzer
+        let resultsTaskToFinish = resultsTask
         analyzer = nil
         transcriber = nil
-        analyzerFormat = nil
+        resultsTask = nil
 
         if let analyzerToFinalize = analyzerToFinalize {
-            Task {
+            finalizationTask = Task { [weak self] in
+                await pipeline?.value
+                continuation?.finish()
                 do {
                     try await analyzerToFinalize.finalizeAndFinishThroughEndOfInput()
+                    // Wait for trailing results emitted by finalization
+                    await resultsTaskToFinish?.value
                 } catch {
                     #if DEBUG
                     debugLog("SpeechAnalyzerSTT: Finalization error: \(error)")
                     #endif
                 }
-            }
-        }
+                resultsTaskToFinish?.cancel()
 
-        // Reset state
-        lastTranscription = ""
-        accumulatedTranscription = ""
-        bufferCount = 0
-        lastBufferTime = nil
+                // Reset state only if no new session has started in the meantime
+                guard let self = self, self.sessionID == session else { return }
+                self.lastTranscription = ""
+                self.accumulatedTranscription = ""
+            }
+        } else {
+            // Reset state
+            lastTranscription = ""
+            accumulatedTranscription = ""
+        }
 
         if isListening {
             isListening = false
@@ -258,9 +284,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         if shouldPreBuffer {
             addToPreBuffer(buffer)
         } else {
-            Task {
-                await sendBufferToAnalyzer(buffer)
-            }
+            bufferContinuation?.yield(buffer)
         }
     }
 
@@ -310,9 +334,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
             if shouldPreBuffer {
                 self.addToPreBuffer(buffer)
             } else {
-                Task { [weak self] in
-                    await self?.sendBufferToAnalyzer(buffer)
-                }
+                self.bufferContinuation?.yield(buffer)
             }
         }
 
@@ -360,7 +382,6 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         let buffersToFlush = preBufferLock.withLock {
             let buffers = preBuffer
             preBuffer.removeAll()
-            isPreBuffering = false
             return buffers
         }
 
@@ -368,59 +389,77 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         debugLog("SpeechAnalyzerSTT: Flushing \(buffersToFlush.count) pre-buffered audio chunks")
         #endif
 
+        // Enqueue through the same serial pipeline so pre-buffered audio stays
+        // ahead of live buffers in order
         for buffer in buffersToFlush {
-            await sendBufferToAnalyzer(buffer)
+            bufferContinuation?.yield(buffer)
+        }
+
+        // Stop pre-buffering only after the drained buffers are enqueued, then
+        // pick up any buffers that arrived while flushing
+        let stragglers = preBufferLock.withLock {
+            isPreBuffering = false
+            let buffers = preBuffer
+            preBuffer.removeAll()
+            return buffers
+        }
+        for buffer in stragglers {
+            bufferContinuation?.yield(buffer)
         }
     }
 
-    private var bufferCount = 0
-    private var lastBufferTime: Date?
+    // Single consumer of the buffer stream. Runs detached from the main actor so
+    // conversion doesn't block the UI; the serial loop preserves buffer order.
+    private nonisolated func runBufferPipeline(
+        _ stream: AsyncStream<AVAudioPCMBuffer>,
+        format: AVAudioFormat,
+        continuation: AsyncStream<AnalyzerInput>.Continuation
+    ) async {
+        var audioConverter: AVAudioConverter?
+        var bufferCount = 0
 
-    private func sendBufferToAnalyzer(_ buffer: AVAudioPCMBuffer) async {
-        guard let analyzerFormat = analyzerFormat,
-              let inputContinuation = inputContinuation else { return }
-
-        bufferCount += 1
-        #if DEBUG
-        if bufferCount == 1 {
-            lastBufferTime = Date()
-            debugLog("SpeechAnalyzerSTT: First audio buffer sent to analyzer")
-        } else if bufferCount % 50 == 0 {
-            debugLog("SpeechAnalyzerSTT: Sent \(bufferCount) buffers...")
-        }
-        #endif
-
-        do {
-            // Convert buffer if needed
-            let convertedBuffer: AVAudioPCMBuffer
-            if let converter = audioConverter {
-                convertedBuffer = try convertBuffer(buffer, using: converter, to: analyzerFormat)
-            } else if buffer.format == analyzerFormat {
-                convertedBuffer = buffer
-            } else {
-                // Create converter on demand if formats don't match
-                guard let newConverter = AVAudioConverter(from: buffer.format, to: analyzerFormat) else {
-                    #if DEBUG
-                    debugLog("SpeechAnalyzerSTT: Failed to create audio converter")
-                    #endif
-                    return
-                }
-                audioConverter = newConverter
-                convertedBuffer = try convertBuffer(buffer, using: newConverter, to: analyzerFormat)
-            }
-
-            // Yield to analyzer
-            let input = AnalyzerInput(buffer: convertedBuffer)
-            inputContinuation.yield(input)
-
-        } catch {
+        for await buffer in stream {
+            bufferCount += 1
             #if DEBUG
-            debugLog("SpeechAnalyzerSTT: Buffer conversion error: \(error)")
+            if bufferCount == 1 {
+                debugLog("SpeechAnalyzerSTT: First audio buffer sent to analyzer")
+            } else if bufferCount % 50 == 0 {
+                debugLog("SpeechAnalyzerSTT: Sent \(bufferCount) buffers...")
+            }
             #endif
+
+            do {
+                // Convert buffer if needed
+                let convertedBuffer: AVAudioPCMBuffer
+                if let converter = audioConverter {
+                    convertedBuffer = try convertBuffer(buffer, using: converter, to: format)
+                } else if buffer.format == format {
+                    convertedBuffer = buffer
+                } else {
+                    // Create converter on demand if formats don't match
+                    guard let newConverter = AVAudioConverter(from: buffer.format, to: format) else {
+                        #if DEBUG
+                        debugLog("SpeechAnalyzerSTT: Failed to create audio converter")
+                        #endif
+                        continue
+                    }
+                    audioConverter = newConverter
+                    convertedBuffer = try convertBuffer(buffer, using: newConverter, to: format)
+                }
+
+                // Yield to analyzer
+                let input = AnalyzerInput(buffer: convertedBuffer)
+                continuation.yield(input)
+
+            } catch {
+                #if DEBUG
+                debugLog("SpeechAnalyzerSTT: Buffer conversion error: \(error)")
+                #endif
+            }
         }
     }
 
-    private func convertBuffer(_ buffer: AVAudioPCMBuffer, using converter: AVAudioConverter, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
+    private nonisolated func convertBuffer(_ buffer: AVAudioPCMBuffer, using converter: AVAudioConverter, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
         // Calculate output frame capacity based on sample rate ratio
         let sampleRateRatio = format.sampleRate / buffer.format.sampleRate
         let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * sampleRateRatio)
@@ -444,11 +483,13 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
 
     private func startResultsMonitoring() {
         guard let transcriber = transcriber else { return }
+        let session = sessionID
 
         resultsTask = Task { [weak self] in
             do {
                 for try await result in transcriber.results {
-                    guard let self = self, !Task.isCancelled else { break }
+                    // Stop if cancelled or a newer session has taken over
+                    guard let self = self, !Task.isCancelled, self.sessionID == session else { break }
 
                     // Extract text from AttributedString properly
                     // Note: String(result.text.characters) returns Slice description, not the actual text

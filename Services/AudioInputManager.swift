@@ -14,31 +14,43 @@ struct AudioInputDevice: Identifiable, Equatable, Hashable {
 final class AudioInputManager {
     static let shared = AudioInputManager()
 
+    // Cache state protected by `cacheLock`, mirroring AudioOutputManager —
+    // callers are currently mostly MainActor UI code, but that is not
+    // guaranteed, so all cache access must be serialized.
     private var cachedDevices: [AudioInputDevice]?
     private var cacheTime: Date?
+    private let cacheLock = NSLock()
     private let cacheExpirationInterval: TimeInterval = 30  // 30 seconds cache
 
     private init() {}
 
     /// Get list of available audio input devices (cached)
     func availableInputDevices() -> [AudioInputDevice] {
-        // Return cached devices if available and not expired
+        cacheLock.lock()
         if let cached = cachedDevices,
            let time = cacheTime,
            Date().timeIntervalSince(time) < cacheExpirationInterval {
+            cacheLock.unlock()
             return cached
         }
+        cacheLock.unlock()
 
+        // Fetch outside the lock (Core Audio calls can be slow) then re-acquire
+        // to publish the result.
         let devices = fetchDevicesFromSystem()
+        cacheLock.lock()
         cachedDevices = devices
         cacheTime = Date()
+        cacheLock.unlock()
         return devices
     }
 
     /// Clear the device cache (call when devices might have changed)
     func clearCache() {
+        cacheLock.lock()
         cachedDevices = nil
         cacheTime = nil
+        cacheLock.unlock()
     }
 
     /// Fetch devices from system (Core Audio)
@@ -98,14 +110,22 @@ final class AudioInputManager {
 
         guard status == noErr, dataSize > 0 else { return false }
 
-        let bufferListPointer = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        defer { bufferListPointer.deallocate() }
+        // Allocate the size Core Audio actually reported, not one AudioBufferList.
+        // A device with multiple streams (e.g. a multi-channel non-interleaved
+        // interface) returns dataSize > MemoryLayout<AudioBufferList>.size because
+        // the struct is variable-length (mBuffers is a trailing array), so a
+        // fixed capacity:1 allocation would be overrun by AudioObjectGetPropertyData.
+        let rawPointer = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(dataSize),
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { rawPointer.deallocate() }
 
-        let getStatus = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, bufferListPointer)
+        let getStatus = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, rawPointer)
 
         guard getStatus == noErr else { return false }
 
-        let bufferList = bufferListPointer.pointee
+        let bufferList = rawPointer.assumingMemoryBound(to: AudioBufferList.self).pointee
         return bufferList.mNumberBuffers > 0
     }
 

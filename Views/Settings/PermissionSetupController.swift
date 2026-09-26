@@ -77,6 +77,14 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         window = nil
         PermissionService.shared.stopMonitoring()
-        NSApp.setActivationPolicy(.accessory)
+        // Only drop back to accessory when no other windows are open —
+        // otherwise the Dock icon disappears while e.g. Settings is still
+        // visible (same fix as FloatingWindowManager.hideFloatingWindow).
+        let hasOtherWindows = NSApp.windows.contains {
+            $0.identifier?.rawValue == "settings" && $0.isVisible
+        }
+        if !hasOtherWindows {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }

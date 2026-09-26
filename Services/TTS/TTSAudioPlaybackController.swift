@@ -23,6 +23,7 @@ final class TTSAudioPlaybackController: NSObject {
     private var wordRanges: [NSRange] = []
     private var highlightTimer: Timer?
     private var tempFileURL: URL?
+    private var playbackGeneration = UUID()
     private var playbackStartTime: AVAudioTime?
     private var audioDuration: TimeInterval = 0
 
@@ -46,6 +47,7 @@ final class TTSAudioPlaybackController: NSObject {
 
     /// Play audio data with the given file extension
     func playAudio(data: Data, fileExtension: String) throws {
+        playbackGeneration = UUID()
         // Stop any existing playback but preserve prepared text data
         highlightTimer?.invalidate()
         highlightTimer = nil
@@ -66,21 +68,19 @@ final class TTSAudioPlaybackController: NSObject {
             throw TTSError.audioError("Failed to create temp file URL")
         }
 
-        try data.write(to: tempURL)
-
-        // Use AVAudioEngine if custom output device is specified, otherwise use simpler AVAudioPlayer
-        if !outputDeviceUID.isEmpty {
-            try playWithAudioEngine(url: tempURL)
-        } else {
-            try playWithAudioPlayer(url: tempURL)
+        do {
+            try data.write(to: tempURL)
+            // Use AVAudioEngine for custom output devices.
+            if !outputDeviceUID.isEmpty {
+                try playWithAudioEngine(url: tempURL)
+            } else {
+                try playWithAudioPlayer(url: tempURL)
+            }
+        } catch {
+            stopPlayback()
+            throw error
         }
 
-        // Schedule temp file cleanup as safety net (in case stopPlayback is not called)
-        let urlToClean = tempURL
-        Task {
-            try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
-            try? FileManager.default.removeItem(at: urlToClean)
-        }
     }
 
     /// Play audio using AVAudioPlayer (simple, uses system default output)
@@ -138,9 +138,11 @@ final class TTSAudioPlaybackController: NSObject {
         audioFile = file
 
         // Schedule the entire file with .dataPlayedBack completion type
+        let generation = playbackGeneration
         playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor in
-                self?.audioEngineDidFinishPlaying()
+                guard let self, self.playbackGeneration == generation else { return }
+                self.audioEngineDidFinishPlaying()
             }
         }
 
@@ -188,6 +190,9 @@ final class TTSAudioPlaybackController: NSObject {
         highlightTimer?.invalidate()
         highlightTimer = nil
         stopAudioEngine()
+        // File has been fully read (completionCallbackType: .dataPlayedBack),
+        // so it is safe to delete now.
+        cleanupTempFile()
         isSpeaking = false
         isPaused = false
         onFinishSpeaking?(true)
@@ -249,6 +254,7 @@ final class TTSAudioPlaybackController: NSObject {
 
     /// Stop playback and reset state
     func stopPlayback() {
+        playbackGeneration = UUID()
         highlightTimer?.invalidate()
         highlightTimer = nil
 
@@ -350,21 +356,11 @@ final class TTSAudioPlaybackController: NSObject {
     // MARK: - Static Text Analysis Methods
 
     /// Calculate word ranges for the given text
-    /// Simple whitespace-based splitting
+    /// UTF-16 ranges for whitespace-delimited words, including composed characters.
     static func calculateWordRanges(for text: String) -> [NSRange] {
-        var ranges: [NSRange] = []
-        var currentIndex = 0
-        let components = text.components(separatedBy: .whitespacesAndNewlines)
-
-        for component in components where !component.isEmpty {
-            if let range = text.range(of: component, range: text.index(text.startIndex, offsetBy: currentIndex)..<text.endIndex) {
-                let nsRange = NSRange(range, in: text)
-                ranges.append(nsRange)
-                currentIndex = nsRange.upperBound
-            }
-        }
-
-        return ranges
+        let regex = try? NSRegularExpression(pattern: "\\S+")
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex?.matches(in: text, range: range).map(\.range) ?? []
     }
 }
 
@@ -373,8 +369,10 @@ final class TTSAudioPlaybackController: NSObject {
 extension TTSAudioPlaybackController: AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
+            guard audioPlayer === player else { return }
             highlightTimer?.invalidate()
             highlightTimer = nil
+            cleanupTempFile()
             isSpeaking = false
             isPaused = false
             onFinishSpeaking?(flag)
@@ -383,6 +381,8 @@ extension TTSAudioPlaybackController: AVAudioPlayerDelegate {
 
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         Task { @MainActor in
+            guard audioPlayer === player else { return }
+            cleanupTempFile()
             highlightTimer?.invalidate()
             highlightTimer = nil
             isSpeaking = false

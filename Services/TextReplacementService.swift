@@ -197,11 +197,12 @@ final class TextReplacementService: ObservableObject {
 
             let replacement = builtInPatternReplacement(pattern)
             let range = NSRange(result.startIndex..., in: result)
+            // Escape the template so user text like "$1" isn't treated as a capture group reference
             result = regex.stringByReplacingMatches(
                 in: result,
                 options: [],
                 range: range,
-                withTemplate: replacement
+                withTemplate: NSRegularExpression.escapedTemplate(for: replacement)
             )
         }
 

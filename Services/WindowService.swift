@@ -242,29 +242,6 @@ final class WindowService {
         }.value
     }
 
-    /// Generate a thumbnail for a window
-    private func generateThumbnail(for windowID: CGWindowID, bounds: CGRect) -> NSImage? {
-        guard let cgImage = CGWindowListCreateImage(
-            bounds,
-            .optionIncludingWindow,
-            windowID,
-            [.boundsIgnoreFraming, .nominalResolution]
-        ) else {
-            return nil
-        }
-
-        // Scale down for thumbnail
-        let maxSize: CGFloat = 120
-        let scale = min(maxSize / bounds.width, maxSize / bounds.height, 1.0)
-        let thumbnailSize = NSSize(
-            width: bounds.width * scale,
-            height: bounds.height * scale
-        )
-
-        let image = NSImage(cgImage: cgImage, size: thumbnailSize)
-        return image
-    }
-
     /// Check if a window still exists
     /// Returns a tuple: (appExists: Bool, windowExists: Bool)
     func checkWindowExists(_ windowInfo: WindowInfo) -> (appExists: Bool, windowExists: Bool) {

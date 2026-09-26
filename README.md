@@ -60,12 +60,14 @@ Convert text to speech using:
 | Provider | Models | API Key |
 |----------|--------|---------|
 | **macOS Native** | System Default | Not required |
-| **OpenAI** | GPT-4o Mini TTS (Dec 2025), GPT-4o Mini TTS, TTS-1, TTS-1 HD | Required |
-| **Google Gemini** | Gemini 3.1 Flash TTS (Preview) — expressive, multilingual | Required |
-| **ElevenLabs** | Eleven v3, Flash v2.5, Multilingual v2, Turbo v2.5, Monolingual v1 | Required |
-| **Grok** | Grok TTS — 5 voices, 20+ languages | Required |
+| **OpenAI** | GPT-4o Mini TTS (Dec 2025) | Required |
+| **Google Gemini** | Gemini 3.8 Flash TTS (default), Gemini 3.8 Flash-Lite TTS — expressive, multilingual | Required |
+| **ElevenLabs** | Eleven v3, Flash v2.5 | Required |
+| **Grok** | Grok TTS — 26 voices, 25+ languages | Required |
 
-**Voice tags**: Gemini 3.1, Grok TTS, and ElevenLabs v3 support expressive inline tags like `[whispers]`, `[laughs]`, `[excited]`, and (for Grok) wrapping tags like `<whisper>...</whisper>`, `<slow>...</slow>`. Paste or type tags directly into the TTS panel; a "Reference" link in the empty panel points to each provider's tag documentation.
+Gemini TTS playback speed can be adjusted from 0.5–2.0x. Saved audio retains its original pace.
+
+**Voice tags**: Gemini 3.8, Grok TTS, and ElevenLabs v3 support expressive inline tags like `[whispers]`, `[laughs]`, `[excited]`, and (for Grok) wrapping tags like `<whisper>...</whisper>`, `<slow>...</slow>`. Paste or type tags directly into the TTS panel; a "Reference" link in the empty panel points to each provider's tag documentation.
 
 ### OCR to Speech
 
@@ -85,7 +87,7 @@ Display real-time transcription as subtitles overlay during recording:
 - **On-screen subtitles** - Show transcription as floating subtitles anywhere on screen
 - **Real-time translation** - Optionally translate subtitles as you speak
 - **Customizable appearance** - Adjust font size, opacity, position (top/bottom), and max lines
-- **Draggable position** - Drag subtitles to any location on screen
+- **Draggable position** - Use the top handle to drag subtitles to any location on screen
 - **Auto-hide panel** - Optionally hide STT panel when subtitle mode is active
 
 Toggle with hotkey (`Ctrl + Option + S` by default) or from the STT panel/menu bar.
@@ -250,8 +252,8 @@ Open Settings with `Cmd + ,` or from the menu bar. The unified settings window u
 
 Choose between two panel styles in **Settings** > **Appearance**:
 
-- **Floating**: Always-on-top borderless panels that can be dragged from anywhere
-- **Standard Window**: Regular macOS windows with title bar, can be minimized
+- **Floating**: Always-on-top borderless panels; drag the top handle to move them
+- **Standard Window**: Regular macOS windows; drag the title bar to move them, or minimize them
 
 Note: Only one panel (STT or TTS) can be open at a time. Opening one will close the other.
 

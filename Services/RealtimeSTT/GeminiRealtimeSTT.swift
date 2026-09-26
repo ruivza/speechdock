@@ -17,6 +17,9 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
 
     private var audioEngine: AVAudioEngine?
     private var webSocketTask: URLSessionWebSocketTask?
+    private var finishingWebSocketTask: URLSessionWebSocketTask?
+    private var connectionGeneration = UUID()
+    private var finalResponseReceived = false
     private var urlSession: URLSession?
 
     private let apiKeyManager = APIKeyManager.shared
@@ -60,6 +63,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Stop any existing session
         stopListening()
+        finishingWebSocketTask = nil
 
         isIntentionallyStopping = false
         reconnectAttempts = 0
@@ -96,8 +100,8 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
             // Send setup message
             try await sendSetupMessage()
 
-            // Wait for setup complete
-            try await Task.sleep(nanoseconds: 300_000_000)  // 0.3 seconds
+            // Wait for setup complete (audio stays in pre-buffer until then)
+            try await waitForSetupComplete()
 
             // Flush pre-buffered audio
             await flushPreBuffer()
@@ -110,7 +114,30 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
         }
     }
 
+    func finishListening() async {
+        guard isListening, let task = webSocketTask else { stopListening(); return }
+        let generation = connectionGeneration
+        isIntentionallyStopping = true
+        isListening = false
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        finalResponseReceived = false
+        let message: [String: Any] = ["realtimeInput": ["audioStreamEnd": true]]
+        if let data = try? JSONSerialization.data(withJSONObject: message),
+           let text = String(data: data, encoding: .utf8) {
+            try? await task.send(.string(text))
+        }
+        let deadline = Date().addingTimeInterval(1.5)
+        while !finalResponseReceived, generation == connectionGeneration, Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard generation == connectionGeneration else { return }
+        stopListening()
+    }
+
     func stopListening() {
+        connectionGeneration = UUID()
         isIntentionallyStopping = true
         dprint("GeminiRealtimeSTT: stopListening called, isListening=\(isListening)")
 
@@ -191,6 +218,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
         urlSession = session
 
         let task = session.webSocketTask(with: url)
+        finishingWebSocketTask = nil
         webSocketTask = task
         task.resume()
 
@@ -208,6 +236,22 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
             try await Task.sleep(nanoseconds: 100_000_000)  // 0.1 second
         }
         dprint("GeminiRealtimeSTT: WebSocket connected")
+
+    }
+
+    /// Wait for setupComplete from the server with timeout.
+    /// Audio is kept in the pre-buffer while waiting so nothing is dropped
+    /// if the server takes longer than expected to acknowledge setup.
+    private func waitForSetupComplete(timeout: TimeInterval = 10.0) async throws {
+        let startTime = Date()
+
+        while !isSetupComplete {
+            if Date().timeIntervalSince(startTime) > timeout {
+                throw RealtimeSTTError.apiError("Setup complete timeout")
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)  // 0.1 second
+        }
+        dprint("GeminiRealtimeSTT: Setup complete confirmed, flushing pre-buffer")
 
     }
 
@@ -249,20 +293,30 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
         try await webSocketTask?.send(.string(jsonString))
     }
 
+    private func acceptsMessages(from task: URLSessionWebSocketTask) -> Bool {
+        task === webSocketTask || task === finishingWebSocketTask
+    }
+
     private func startReceivingMessages() {
+        guard let task = webSocketTask else { return }
         Task { [weak self] in
-            while let self = self, let task = self.webSocketTask, task.state == .running {
+            while let self, self.acceptsMessages(from: task), task.state == .running {
                 do {
                     let message = try await task.receive()
+                    guard self.acceptsMessages(from: task) else { return }
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         dprint("GeminiRealtimeSTT: WebSocket receive error: \(error)")
 
                         if self.isListening && !self.isIntentionallyStopping {
+                            let generation = self.connectionGeneration
                             Task {
+                                guard generation == self.connectionGeneration else { return }
                                 await self.handleUnexpectedDisconnection()
                             }
                         } else if self.isListening {
@@ -276,6 +330,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
     }
 
     private func handleUnexpectedDisconnection() async {
+        let generation = connectionGeneration
         guard !isIntentionallyStopping, reconnectAttempts < maxReconnectAttempts else {
             if isListening {
                 // Send accumulated text before reporting error so it's not lost
@@ -301,24 +356,36 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
         isWebSocketConnected = false
         isSetupComplete = false
 
+        // Keep audio in pre-buffer until the new session's setup completes
+        preBufferLock.withLock {
+            isPreBuffering = true
+        }
+
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        guard isListening, !isIntentionallyStopping else { return }
+        guard generation == connectionGeneration, isListening, !isIntentionallyStopping else { return }
 
         do {
             guard let apiKey = apiKeyManager.getAPIKey(for: .gemini) else {
                 throw RealtimeSTTError.apiError("API key not available")
             }
             try await connectWebSocket(apiKey: apiKey)
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             try await sendSetupMessage()
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
+            try await waitForSetupComplete()
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
+            await flushPreBuffer()
             reconnectAttempts = 0
             dprint("GeminiRealtimeSTT: Reconnected successfully")
 
         } catch {
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             dprint("GeminiRealtimeSTT: Reconnect failed: \(error)")
 
             await handleUnexpectedDisconnection()
         }
     }
+
 
     private func handleWebSocketMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
@@ -380,6 +447,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
 
             // Check for turnComplete to send final result
             if let turnComplete = serverContent["turnComplete"] as? Bool, turnComplete {
+                finalResponseReceived = true
                 dprint("GeminiRealtimeSTT: Turn complete")
 
             }
@@ -732,6 +800,7 @@ extension GeminiRealtimeSTT: URLSessionWebSocketDelegate {
 
         // Delegate is called on main queue (OperationQueue.main)
         MainActor.assumeIsolated {
+            guard self.webSocketTask === webSocketTask else { return }
             self.isWebSocketConnected = true
         }
     }
@@ -742,6 +811,7 @@ extension GeminiRealtimeSTT: URLSessionWebSocketDelegate {
 
 
         MainActor.assumeIsolated {
+            guard self.webSocketTask === webSocketTask else { return }
             self.isWebSocketConnected = false
         }
     }

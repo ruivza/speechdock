@@ -28,7 +28,7 @@ nav_order: 1
 
 **Transcribe any audio on your Mac** — Your voice through the microphone, system-wide audio, or sound from a specific app. If your Mac can hear it, SpeechDock can turn it into text in real time.
 
-A menu bar app that makes STT and TTS accessible from anywhere on your Mac with global hotkeys. Works immediately after installation — no API keys or additional downloads required.
+A menu bar app that makes STT and TTS accessible from anywhere on your Mac with global hotkeys. Works immediately after installation — no API keys required; a language model may need to download on first use.
 
 ---
 
@@ -60,8 +60,8 @@ A menu bar app that makes STT and TTS accessible from anywhere on your Mac with 
 - **TTS integration** — Automatically read translated text
 
 ### Cloud Providers (Optional)
-- **OpenAI** — GPT-4o Transcribe (STT), GPT-4o Mini TTS / TTS-1 (TTS)
-- **Google Gemini** — Gemini 2.5 Flash (STT), Gemini 3.1 Flash TTS (TTS)
+- **OpenAI** — GPT Realtime Whisper / GPT-4o Mini Transcribe (STT), GPT-4o Mini TTS (Dec 2025) (TTS)
+- **Google Gemini** — Gemini 2.5 Flash (STT), Gemini 3.8 Flash / Flash-Lite TTS (TTS)
 - **ElevenLabs** — Scribe v2 (STT), Eleven v3 (TTS)
 - **Grok (xAI)** — Grok STT (STT), Grok TTS (TTS)
 

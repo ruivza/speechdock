@@ -44,7 +44,7 @@ enum STTProvider: String, CaseIterable, Identifiable, Codable {
         case .openAI:
             return "Enables STT (GPT-4o Mini Transcribe, Whisper), TTS (GPT-4o Mini TTS), and translation. Optional — macOS built-in works without this."
         case .gemini:
-            return "Enables STT (Gemini 2.5 Flash), TTS (Gemini 3.1 Flash TTS), and translation. Optional — macOS built-in works without this."
+            return "Enables STT (Gemini 2.5 Flash), TTS (Gemini 3.8 Flash / Flash-Lite TTS), and translation. Optional — macOS built-in works without this."
         case .elevenLabs:
             return "Enables STT (Scribe v2) and TTS (Eleven v3). Optional — macOS built-in works without this."
         case .grok:
@@ -55,10 +55,6 @@ enum STTProvider: String, CaseIterable, Identifiable, Codable {
 
 enum STTModel: String, CaseIterable, Identifiable, Codable {
     // OpenAI models
-    // Note: gpt-4o-transcribe was retired by OpenAI on 2026-02-28 and removed.
-    // AppState.loadPreferences migrates legacy "gpt-4o-transcribe" UserDefaults to the
-    // current default; the raw value won't decode here, so existing users fall through
-    // to the default selection cleanly.
     case gpt4oMiniTranscribe = "gpt-4o-mini-transcribe-2025-12-15"
     case whisper1 = "whisper-1"
 
@@ -67,7 +63,6 @@ enum STTModel: String, CaseIterable, Identifiable, Codable {
 
     // ElevenLabs models
     case scribeV2 = "scribe_v2"
-    case scribeV1 = "scribe_v1"
 
     // Grok models
     case grokSTT = "grok-stt"
@@ -80,7 +75,6 @@ enum STTModel: String, CaseIterable, Identifiable, Codable {
         case .whisper1: return "Whisper-1"
         case .gemini25Flash: return "Gemini 2.5 Flash"
         case .scribeV2: return "Scribe v2"
-        case .scribeV1: return "Scribe v1"
         case .grokSTT: return "Grok STT"
         }
     }
@@ -91,7 +85,7 @@ enum STTModel: String, CaseIterable, Identifiable, Codable {
             return .openAI
         case .gemini25Flash:
             return .gemini
-        case .scribeV2, .scribeV1:
+        case .scribeV2:
             return .elevenLabs
         case .grokSTT:
             return .grok

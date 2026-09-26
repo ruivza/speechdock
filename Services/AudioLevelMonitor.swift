@@ -27,6 +27,37 @@ final class AudioLevelMonitor: ObservableObject {
     private let noiseFloorWindowSize = 50  // ~1 second at typical update rate
     private let noiseFloorPercentile: Float = 0.1  // Use 10th percentile as noise floor
 
+    // Pending-update state, accessed under `lock` from both the audio
+    // callback thread (nonisolated) and the main actor, so it lives in a
+    // Sendable box outside this class's MainActor isolation.
+    private final class PendingLevelBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var level: Float?
+        private var isScheduled = false
+
+        /// Store the latest level. Returns true if the caller must schedule
+        /// a main-actor drain, false if one is already scheduled.
+        func storeLevel(_ newLevel: Float) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            level = newLevel
+            if isScheduled { return false }
+            isScheduled = true
+            return true
+        }
+
+        /// Take the latest level and clear the scheduled flag.
+        func takeLevel() -> Float? {
+            lock.lock()
+            defer { lock.unlock() }
+            defer { isScheduled = false }
+            let latest = level
+            level = nil
+            return latest
+        }
+    }
+    nonisolated private let pendingBox = PendingLevelBox()
+
     private init() {}
 
     /// Update the audio level from raw samples
@@ -46,8 +77,16 @@ final class AudioLevelMonitor: ObservableObject {
         let db = 20 * log10(max(rms, 0.0001))
         let normalizedLevel = max(0, min(1, (db + 50) / 50))  // -50dB to 0dB range
 
+        // Coalesce updates: buffers arrive ~50x/sec, so spawning a Task per
+        // buffer is wasteful. Keep only the latest level and hop to the main
+        // actor at most once per pending update.
+        let box = pendingBox
+        guard box.storeLevel(normalizedLevel) else { return }
+
         // Dispatch to main actor for UI updates
         Task { @MainActor in
+            guard let normalizedLevel = box.takeLevel() else { return }
+
             // Apply smoothing
             self.level = self.level * (1 - self.smoothingFactor) + normalizedLevel * self.smoothingFactor
 

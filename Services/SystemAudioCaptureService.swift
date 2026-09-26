@@ -363,6 +363,13 @@ private class AudioStreamOutput: NSObject, SCStreamOutput {
             return nil
         }
 
+        // floatChannelData is nil for non-Float32 formats (e.g. Int16), which
+        // would silently drop all audio below — fail loudly instead.
+        guard audioFormat.commonFormat == .pcmFormatFloat32 else {
+            dprint("SystemAudioCapture: Unexpected audio format \(audioFormat), expected Float32")
+            return nil
+        }
+
         let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
         guard frameCount > 0,
               let pcmBuffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: AVAudioFrameCount(frameCount)) else {

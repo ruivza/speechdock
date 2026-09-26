@@ -16,6 +16,13 @@ let fileManager = FileManager.default
 let currentDir = fileManager.currentDirectoryPath
 let outputPath = "\(currentDir)/\(outputDir)"
 
+do {
+    try fileManager.createDirectory(atPath: outputPath, withIntermediateDirectories: true)
+} catch {
+    print("Error: Failed to create output directory \(outputDir): \(error.localizedDescription)")
+    exit(1)
+}
+
 for size in sizes {
     let imageSize = NSSize(width: size, height: size)
 
@@ -69,8 +76,12 @@ for size in sizes {
     // Save as PNG
     if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
         let filename = "\(outputPath)/icon_\(size)x\(size).png"
-        try? pngData.write(to: URL(fileURLWithPath: filename))
-        print("Created: icon_\(size)x\(size).png (\(size)x\(size) pixels)")
+        do {
+            try pngData.write(to: URL(fileURLWithPath: filename))
+            print("Created: icon_\(size)x\(size).png (\(size)x\(size) pixels)")
+        } catch {
+            print("Error: Failed to write icon_\(size)x\(size).png: \(error.localizedDescription)")
+        }
     }
 }
 

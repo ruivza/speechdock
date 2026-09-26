@@ -11,13 +11,14 @@ final class ElevenLabsSTTClient: STTAPIClient {
     func transcribe(
         audioData: Data,
         model: STTModel,
-        language: String?
+        language: String?,
+        originalExtension: String? = nil
     ) async throws -> TranscriptionResult {
         guard let apiKey = apiKeyManager.getAPIKey(for: .elevenLabs) else {
             throw STTError.invalidAPIKey
         }
 
-        let format = AudioFormatConverter.normalizeFormat(audioData)
+        let format = AudioFormatConverter.normalizeFormat(audioData, originalExtension: originalExtension)
         let boundary = UUID().uuidString
         var body = Data()
 
@@ -62,16 +63,8 @@ final class ElevenLabsSTTClient: STTAPIClient {
         request.httpBody = body
         request.timeoutInterval = 180
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await STTAPIHelper.performRequest(request, providerName: "ElevenLabs")
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw STTError.networkError(URLError(.badServerResponse))
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw STTError.apiError("ElevenLabs API Error (\(httpResponse.statusCode)): \(errorBody)")
-        }
 
         let json = try JSONDecoder().decode(ElevenLabsResponse.self, from: data)
 

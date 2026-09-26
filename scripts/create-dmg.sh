@@ -54,11 +54,14 @@ else
     echo "Note: AppIcon.icns not found, creating DMG without volume icon"
 fi
 
-create-dmg \
+if ! create-dmg \
     "${DMG_ARGS[@]}" \
     "$PROJECT_DIR/$DMG_NAME" \
-    "$BUILD_DIR/$APP_NAME.app" \
-    || true  # create-dmg returns non-zero on some warnings
+    "$BUILD_DIR/$APP_NAME.app"; then
+    # create-dmg returns non-zero on some warnings; log it and let the
+    # existence check below decide whether creation actually failed
+    echo "Warning: create-dmg exited with a non-zero status"
+fi
 
 # Verify DMG was created
 if [ -f "$PROJECT_DIR/$DMG_NAME" ]; then

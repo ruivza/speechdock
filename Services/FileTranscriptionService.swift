@@ -81,7 +81,8 @@ final class FileTranscriptionService {
             return try await client.transcribe(
                 audioData: audioData,
                 model: model,
-                language: language?.isEmpty == true ? nil : language
+                language: language?.isEmpty == true ? nil : language,
+                originalExtension: fileURL.pathExtension
             )
         } catch {
             throw FileTranscriptionError.transcriptionFailed(error)
@@ -189,6 +190,70 @@ final class FileTranscriptionService {
 
     // MARK: - SFSpeechRecognizer File Transcription (all macOS versions)
 
+    /// Lock-guarded state for the SFSpeechRecognizer continuation.
+    /// Guarantees the continuation is resumed exactly once, whether the
+    /// recognition callback fires (possibly multiple times, on a background
+    /// queue) or the surrounding task is cancelled first.
+    private final class RecognitionTaskState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var hasResumed = false
+        private var task: SFSpeechRecognitionTask?
+        private var continuation: CheckedContinuation<TranscriptionResult, Error>?
+
+        func setContinuation(_ continuation: CheckedContinuation<TranscriptionResult, Error>) {
+            lock.lock()
+            self.continuation = continuation
+            let alreadyResumed = hasResumed
+            lock.unlock()
+            // Cancellation won the race before the continuation existed
+            if alreadyResumed {
+                continuation.resume(throwing: CancellationError())
+            }
+        }
+
+        func setTask(_ task: SFSpeechRecognitionTask) {
+            lock.lock()
+            self.task = task
+            let alreadyResumed = hasResumed
+            lock.unlock()
+            if alreadyResumed {
+                task.cancel()
+            }
+        }
+
+        func resume(returning result: TranscriptionResult) {
+            lock.lock()
+            guard !hasResumed else {
+                lock.unlock()
+                return
+            }
+            hasResumed = true
+            let continuation = self.continuation
+            lock.unlock()
+            continuation?.resume(returning: result)
+        }
+
+        func resume(throwing error: Error) {
+            lock.lock()
+            guard !hasResumed else {
+                lock.unlock()
+                return
+            }
+            hasResumed = true
+            let continuation = self.continuation
+            lock.unlock()
+            continuation?.resume(throwing: error)
+        }
+
+        func cancel() {
+            lock.lock()
+            let task = self.task
+            lock.unlock()
+            task?.cancel()
+            resume(throwing: CancellationError())
+        }
+    }
+
     /// Transcribe using SFSpeechURLRecognitionRequest (supports server-based recognition)
     private func transcribeWithSFSpeechRecognizer(fileURL: URL, locale: Locale) async throws -> TranscriptionResult {
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
@@ -200,23 +265,23 @@ final class FileTranscriptionService {
         let request = SFSpeechURLRecognitionRequest(url: fileURL)
         request.shouldReportPartialResults = false
 
-        return try await withCheckedThrowingContinuation { continuation in
-            // Guard against multiple resumptions - the callback can fire multiple times
-            // (e.g., error after partial result, or error after isFinal)
-            var hasResumed = false
+        let state = RecognitionTaskState()
 
-            recognizer.recognitionTask(with: request) { result, error in
-                guard !hasResumed else { return }
-
-                if let error = error {
-                    hasResumed = true
-                    continuation.resume(throwing: FileTranscriptionError.transcriptionFailed(error))
-                    return
-                }
-                guard let result = result, result.isFinal else { return }
-                hasResumed = true
-                continuation.resume(returning: TranscriptionResult(text: result.bestTranscription.formattedString))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                state.setContinuation(continuation)
+                // Retain the task so cancellation can reach it (and it isn't deallocated mid-flight)
+                state.setTask(recognizer.recognitionTask(with: request) { result, error in
+                    if let error = error {
+                        state.resume(throwing: FileTranscriptionError.transcriptionFailed(error))
+                        return
+                    }
+                    guard let result = result, result.isFinal else { return }
+                    state.resume(returning: TranscriptionResult(text: result.bestTranscription.formattedString))
+                })
             }
+        } onCancel: {
+            state.cancel()
         }
     }
 
@@ -252,7 +317,6 @@ final class FileTranscriptionService {
         }
 
         let fileFormat = audioFile.processingFormat
-        let totalFrames = AVAudioFrameCount(audioFile.length)
 
         // Create audio converter if formats differ
         var converter: AVAudioConverter?
@@ -297,10 +361,61 @@ final class FileTranscriptionService {
             throw FileTranscriptionError.transcriptionFailed(error)
         }
 
-        // Read and feed the audio file in chunks
+        // Read and feed the audio file in chunks (off the main actor, so large
+        // files don't block the UI)
+        if let bufferError = await feedAudioToAnalyzer(
+            audioFile: audioFile,
+            analyzerFormat: analyzerFormat,
+            converter: converter,
+            continuation: continuation
+        ) {
+            resultsTask.cancel()
+            try? await analyzer.finalizeAndFinishThroughEndOfInput()
+            throw bufferError is FileTranscriptionError ? bufferError : FileTranscriptionError.transcriptionFailed(bufferError)
+        }
+
+        // Wait for analyzer to finalize
+        do {
+            try await analyzer.finalizeAndFinishThroughEndOfInput()
+        } catch {
+            resultsTask.cancel()
+            throw FileTranscriptionError.transcriptionFailed(error)
+        }
+
+        // Wait for results
+        let fullText: String
+        do {
+            fullText = try await resultsTask.value
+        } catch is CancellationError {
+            throw FileTranscriptionError.transcriptionFailed(
+                NSError(domain: "FileTranscription", code: -1, userInfo: [NSLocalizedDescriptionKey: "Transcription cancelled"])
+            )
+        } catch {
+            throw FileTranscriptionError.transcriptionFailed(error)
+        }
+
+        return TranscriptionResult(text: fullText)
+    }
+
+    /// Read the audio file in chunks and feed (converted) buffers to the analyzer.
+    /// Runs off the main actor so the synchronous AVAudioFile.read loop doesn't
+    /// block the UI on large files. Always finishes the input stream; returns
+    /// the error that stopped the loop, if any.
+    @available(macOS 26, *)
+    nonisolated private func feedAudioToAnalyzer(
+        audioFile: AVAudioFile,
+        analyzerFormat: AVAudioFormat,
+        converter: AVAudioConverter?,
+        continuation: AsyncStream<AnalyzerInput>.Continuation
+    ) async -> Error? {
+        let fileFormat = audioFile.processingFormat
+        let totalFrames = AVAudioFrameCount(audioFile.length)
         let bufferSize: AVAudioFrameCount = 4096
         var framesRead: AVAudioFrameCount = 0
         var bufferError: Error?
+
+        // Signal end of input no matter how the loop exits
+        defer { continuation.finish() }
 
         while framesRead < totalFrames {
             if Task.isCancelled {
@@ -357,38 +472,9 @@ final class FileTranscriptionService {
             framesRead += framesToRead
         }
 
-        // Signal end of input
-        continuation.finish()
-
-        // If buffer processing failed, clean up and throw
-        if let bufferError = bufferError {
-            resultsTask.cancel()
-            try? await analyzer.finalizeAndFinishThroughEndOfInput()
-            throw bufferError is FileTranscriptionError ? bufferError : FileTranscriptionError.transcriptionFailed(bufferError)
-        }
-
-        // Wait for analyzer to finalize
-        do {
-            try await analyzer.finalizeAndFinishThroughEndOfInput()
-        } catch {
-            resultsTask.cancel()
-            throw FileTranscriptionError.transcriptionFailed(error)
-        }
-
-        // Wait for results
-        let fullText: String
-        do {
-            fullText = try await resultsTask.value
-        } catch is CancellationError {
-            throw FileTranscriptionError.transcriptionFailed(
-                NSError(domain: "FileTranscription", code: -1, userInfo: [NSLocalizedDescriptionKey: "Transcription cancelled"])
-            )
-        } catch {
-            throw FileTranscriptionError.transcriptionFailed(error)
-        }
-
-        return TranscriptionResult(text: fullText)
+        return bufferError
     }
+
     /// Resolve a locale to one supported by SpeechTranscriber.
     /// If the given locale is already supported, returns it as-is.
     /// Otherwise, finds the best match from supported locales by language code.

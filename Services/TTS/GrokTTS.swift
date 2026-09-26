@@ -8,6 +8,7 @@ import Foundation
 /// Returns full MP3 audio (non-streaming).
 @MainActor
 final class GrokTTS: NSObject, TTSService {
+    private let synthesis = SynthesisLifecycle()
     weak var delegate: TTSDelegate?
 
     private(set) var isSpeaking = false
@@ -75,6 +76,8 @@ final class GrokTTS: NSObject, TTSService {
         }
 
         stop()
+        let generation = synthesis.generation
+        try synthesis.check(generation)
 
         guard let url = URL(string: Self.ttsRestEndpoint) else {
             throw TTSError.apiError("Invalid Grok TTS endpoint URL")
@@ -104,21 +107,32 @@ final class GrokTTS: NSObject, TTSService {
 
         isSpeaking = true
 
-        let (data, _) = try await TTSAPIHelper.performRequest(request, providerName: "Grok TTS")
+        // Unlike the other providers, `isSpeaking` here is a stored flag rather
+        // than a value derived from the player, so every failure path between
+        // setting it and playback actually starting must clear it — otherwise
+        // the UI stays stuck on "speaking" with no way back.
+        do {
+            let (data, _) = try await TTSAPIHelper.performRequest(request, providerName: "Grok TTS")
+            try synthesis.check(generation)
 
-        guard !data.isEmpty else {
+            guard !data.isEmpty else {
+                throw TTSError.audioError("No audio data in response")
+            }
+
+            lastAudioData = data
+
+            playbackController.prepareText(text)
+            playbackController.setPlaybackRate(Float(selectedSpeed))
+            try playbackController.playAudio(data: data, fileExtension: "mp3")
+        } catch {
+            guard synthesis.generation == generation else { throw CancellationError() }
             isSpeaking = false
-            throw TTSError.audioError("No audio data in response")
+            throw error
         }
-
-        lastAudioData = data
-
-        playbackController.prepareText(text)
-        playbackController.setPlaybackRate(Float(selectedSpeed))
-        try playbackController.playAudio(data: data, fileExtension: "mp3")
     }
 
     func pause() {
+        guard isSpeaking, !isPaused else { return }
         playbackController.pause()
         isPaused = true
     }
@@ -129,6 +143,7 @@ final class GrokTTS: NSObject, TTSService {
     }
 
     func stop() {
+        synthesis.invalidate()
         isSpeaking = false
         isPaused = false
         playbackController.stopPlayback()

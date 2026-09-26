@@ -14,14 +14,15 @@ final class GeminiSTTClient: STTAPIClient {
     func transcribe(
         audioData: Data,
         model: STTModel,
-        language: String?
+        language: String?,
+        originalExtension: String? = nil
     ) async throws -> TranscriptionResult {
         guard let apiKey = apiKeyManager.getAPIKey(for: .gemini) else {
             throw STTError.invalidAPIKey
         }
 
         let base64Audio = audioData.base64EncodedString()
-        let format = AudioFormatConverter.normalizeFormat(audioData)
+        let format = AudioFormatConverter.normalizeFormat(audioData, originalExtension: originalExtension)
         let mimeType = AudioFormatConverter.mimeTypeForGemini(from: format)
         let prompt = buildTranscriptionPrompt(language: language)
 
@@ -37,25 +38,19 @@ final class GeminiSTTClient: STTAPIClient {
             ]]
         ]
 
-        var urlComponents = URLComponents(string: endpoint(for: model))!
-        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        guard let url = URL(string: endpoint(for: model)) else {
+            throw STTError.apiError("Invalid Gemini API endpoint URL")
+        }
 
-        var request = URLRequest(url: urlComponents.url!)
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         request.timeoutInterval = 60
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await STTAPIHelper.performRequest(request, providerName: "Gemini")
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw STTError.networkError(URLError(.badServerResponse))
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw STTError.apiError("Gemini API Error (\(httpResponse.statusCode)): \(errorBody)")
-        }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let candidates = json?["candidates"] as? [[String: Any]],

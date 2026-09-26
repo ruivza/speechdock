@@ -37,11 +37,12 @@ struct APIKeyValidator {
     }
 
     private static func validateGemini(key: String) async -> ValidationResult {
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?key=\(key)") else {
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models") else {
             return .networkError("Invalid URL")
         }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
         request.timeoutInterval = 10
         return await performRequest(request)
     }

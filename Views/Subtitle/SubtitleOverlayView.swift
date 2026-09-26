@@ -87,7 +87,7 @@ struct SubtitleOverlayView: View {
 
     var body: some View {
         ZStack {
-            // Invisible hit area for dragging - fills entire window
+            // Keep the transparent window content laid out even before text arrives.
             Color.white.opacity(0.001)
 
             VStack(spacing: 0) {
@@ -99,6 +99,12 @@ struct SubtitleOverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .top) {
+            WindowDragHandle(color: .white.withAlphaComponent(0.6))
+                .frame(height: 16)
+                .padding(.horizontal, 44)
+                .padding(.top, 8)
+        }
     }
 
     @ViewBuilder

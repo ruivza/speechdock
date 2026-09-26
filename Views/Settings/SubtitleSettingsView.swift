@@ -94,7 +94,7 @@ struct SubtitleSettingsView: View {
                 }
 
                 Picker("Max Lines", selection: $appState.subtitleMaxLines) {
-                    ForEach(2...6, id: \.self) { lines in
+                    ForEach(2...8, id: \.self) { lines in
                         Text("\(lines) lines").tag(lines)
                     }
                 }

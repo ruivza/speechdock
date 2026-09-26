@@ -34,6 +34,7 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
     private var isRestarting = false
 
     // Task identifier to ignore callbacks from old/cancelled tasks
+    private var finalResponseReceived = false
     private var currentTaskId: UUID?
     private var restartTimestamp: Date?
 
@@ -73,15 +74,13 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Stop any existing session (but don't clear accumulated text if restarting)
         if !isRestarting {
-            stopListening()
+            stopListeningSilently()
             accumulatedTranscription = ""
         }
 
         // Create recognition request
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest = recognitionRequest else {
-            throw RealtimeSTTError.audioError("Failed to create recognition request")
-        }
+        let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        self.recognitionRequest = recognitionRequest
 
         recognitionRequest.shouldReportPartialResults = true
         recognitionRequest.addsPunctuation = true
@@ -102,6 +101,11 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
             // Configure input node
             let inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+            // Validate format (can be invalid with sampleRate 0 when no input device is available)
+            guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+                throw RealtimeSTTError.audioError("Invalid audio input format (no input device available)")
+            }
 
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 self?.recognitionRequest?.append(buffer)
@@ -149,6 +153,7 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
                     }
 
                     if result.isFinal {
+                        self.finalResponseReceived = true
                         self.delegate?.realtimeSTT(self, didReceiveFinalResult: fullTranscription)
                         self.lastTranscription = currentTranscription
                     } else {
@@ -250,7 +255,16 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
             } catch {
                 dprint("MacOSRealtimeSTT: Failed to restart session: \(error)")
 
+                // Clean up so the engine doesn't keep running silently
+                sessionRestartTimer?.invalidate()
+                sessionRestartTimer = nil
+                audioEngine?.stop()
+                audioEngine?.inputNode.removeTap(onBus: 0)
+                audioLevelMonitor.stop()
+
+                isListening = false
                 isRestarting = false
+                delegate?.realtimeSTT(self, didChangeListeningState: false)
                 delegate?.realtimeSTT(self, didFailWithError: error)
             }
         }
@@ -295,6 +309,7 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
                     }
 
                     if result.isFinal {
+                        self.finalResponseReceived = true
                         self.delegate?.realtimeSTT(self, didReceiveFinalResult: fullTranscription)
                         self.lastTranscription = currentTranscription
                     } else {
@@ -346,7 +361,34 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
         }
     }
 
+    func finishListening() async {
+        guard isListening else { return }
+        let taskID = currentTaskId
+        sessionRestartTimer?.invalidate()
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        finalResponseReceived = false
+        recognitionRequest?.endAudio()
+        recognitionTask?.finish()
+        let deadline = Date().addingTimeInterval(1.5)
+        while !finalResponseReceived, currentTaskId == taskID, Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard currentTaskId == taskID else { return }
+        stopListening()
+    }
+
     func stopListening() {
+        performStop(notifyDelegate: true)
+    }
+
+    /// Stop session without notifying the delegate (used for internal cleanup before starting)
+    private func stopListeningSilently() {
+        performStop(notifyDelegate: false)
+    }
+
+    private func performStop(notifyDelegate: Bool) {
         // Stop session restart timer
         sessionRestartTimer?.invalidate()
         sessionRestartTimer = nil
@@ -370,7 +412,9 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
 
         if isListening {
             isListening = false
-            delegate?.realtimeSTT(self, didChangeListeningState: false)
+            if notifyDelegate {
+                delegate?.realtimeSTT(self, didChangeListeningState: false)
+            }
         }
     }
 

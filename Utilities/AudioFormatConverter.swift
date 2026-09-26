@@ -14,10 +14,26 @@ enum AudioFormatConverter {
             return NormalizedAudioFormat(mimeType: "audio/wav", fileExtension: "wav")
         }
 
-        // MP3: ID3 tag or MPEG sync word
+        if bytes.starts(with: Array("fLaC".utf8)) {
+            return NormalizedAudioFormat(mimeType: "audio/flac", fileExtension: "flac")
+        }
+        if bytes.count >= 12, bytes.starts(with: Array("FORM".utf8)),
+           ["AIFF", "AIFC"].contains(String(bytes: bytes[8..<12], encoding: .ascii) ?? "") {
+            return NormalizedAudioFormat(mimeType: "audio/aiff", fileExtension: "aiff")
+        }
+        // ADTS sync word, with MPEG layer bits required to be zero.
+        if bytes.count >= 2, bytes[0] == 0xff, bytes[1] & 0xf6 == 0xf0 {
+            return NormalizedAudioFormat(mimeType: "audio/aac", fileExtension: "aac")
+        }
+
+        // MP3: ID3 tag or MPEG sync word (MPEG-1/2/2.5, Layer II/III)
         if bytes.starts(with: [0x49, 0x44, 0x33]) ||
            bytes.starts(with: [0xFF, 0xFB]) ||
-           bytes.starts(with: [0xFF, 0xFA]) {
+           bytes.starts(with: [0xFF, 0xFA]) ||
+           bytes.starts(with: [0xFF, 0xF3]) ||
+           bytes.starts(with: [0xFF, 0xF2]) ||
+           bytes.starts(with: [0xFF, 0xE3]) ||
+           bytes.starts(with: [0xFF, 0xE2]) {
             return NormalizedAudioFormat(mimeType: "audio/mpeg", fileExtension: "mp3")
         }
 
@@ -42,7 +58,13 @@ enum AudioFormatConverter {
         // Fallback based on extension
         if let ext = originalExtension?.lowercased() {
             switch ext {
-            case "mpeg":
+            case "flac": return NormalizedAudioFormat(mimeType: "audio/flac", fileExtension: "flac")
+            case "aac": return NormalizedAudioFormat(mimeType: "audio/aac", fileExtension: "aac")
+            case "aif", "aiff", "aifc": return NormalizedAudioFormat(mimeType: "audio/aiff", fileExtension: "aiff")
+            case "wav": return NormalizedAudioFormat(mimeType: "audio/wav", fileExtension: "wav")
+            case "ogg": return NormalizedAudioFormat(mimeType: "audio/ogg", fileExtension: "ogg")
+            case "webm": return NormalizedAudioFormat(mimeType: "audio/webm", fileExtension: "webm")
+            case "mp3", "mpeg":
                 return NormalizedAudioFormat(mimeType: "audio/mpeg", fileExtension: "mp3")
             case "wave", "x-wav":
                 return NormalizedAudioFormat(mimeType: "audio/wav", fileExtension: "wav")
@@ -64,7 +86,10 @@ enum AudioFormatConverter {
         case "wav", "wave":
             return "audio/wav"
         case "m4a", "mp4":
-            return "audio/aac"
+            return "audio/mp4"
+        case "aac": return "audio/aac"
+        case "aiff": return "audio/aiff"
+        case "webm": return "audio/webm"
         case "ogg":
             return "audio/ogg"
         case "flac":

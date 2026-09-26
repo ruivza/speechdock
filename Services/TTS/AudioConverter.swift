@@ -181,12 +181,21 @@ enum AudioConverter {
         nonisolated(unsafe) let output = readerOutput
         nonisolated(unsafe) let input = writerInput
 
+        // Guard against the callback firing again after markAsFinished():
+        // without this, finishWriting could run twice and the continuation
+        // would be resumed twice (runtime crash). Only accessed on
+        // processingQueue, so a plain flag is sufficient.
+        nonisolated(unsafe) var conversionFinished = false
+
         return await withCheckedContinuation { continuation in
             input.requestMediaDataWhenReady(on: processingQueue) {
+                guard !conversionFinished else { return }
+
                 while input.isReadyForMoreMediaData {
                     if let sampleBuffer = output.copyNextSampleBuffer() {
                         input.append(sampleBuffer)
                     } else {
+                        conversionFinished = true
                         input.markAsFinished()
 
                         if reader.status == .completed {

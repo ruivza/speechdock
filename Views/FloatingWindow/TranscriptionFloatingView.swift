@@ -651,6 +651,10 @@ struct TranscriptionFloatingView: View {
             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
     }
 
+    /// Fixed bar heights for the "Listening..." placeholder so re-evaluations
+    /// of body don't randomly reshuffle the bars
+    private static let placeholderBarHeights: [CGFloat] = [14, 22, 10, 25, 8]
+
     /// Placeholder overlay when text area is empty
     @ViewBuilder
     private var placeholderOverlay: some View {
@@ -671,7 +675,7 @@ struct TranscriptionFloatingView: View {
                             ForEach(0..<5, id: \.self) { index in
                                 RoundedRectangle(cornerRadius: 2)
                                     .fill(Color.red.opacity(0.7))
-                                    .frame(width: 3, height: CGFloat.random(in: 8...25))
+                                    .frame(width: 3, height: Self.placeholderBarHeights[index])
                             }
                         }
                         Text("Listening...")
@@ -1072,6 +1076,14 @@ struct TranscriptionFloatingView: View {
         .frame(minWidth: 820, idealWidth: 900, maxWidth: .infinity)
         .background(panelBackground)
         .cornerRadius(panelCornerRadius)
+        .overlay(alignment: .top) {
+            if isFloatingStyle {
+                WindowDragHandle()
+                    .frame(height: 12)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+            }
+        }
         .onChange(of: appState.currentTranscription) { _, newValue in
             // Update editedText during recording (append mode)
             if isRecording {
@@ -1432,6 +1444,15 @@ struct TranscriptionFloatingView: View {
                 } catch {
                     dprint("Failed to save transcription: \(error)")
 
+                    let alert = NSAlert()
+                    alert.messageText = NSLocalizedString("Save Failed", comment: "Alert title when saving transcription fails")
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
+
+                    alert.window.level = .floating + 1
+
+                    alert.runModal()
                 }
             }
         }

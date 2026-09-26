@@ -6,6 +6,8 @@ import CoreAudio
 /// macOS native TTS using the `say` command with AVAudioPlayer for accurate timing
 /// First generates audio file, then plays it with precise word highlighting
 final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
+    private let synthesis = SynthesisLifecycle()
+    private var synthesisProcess: Process?
     weak var delegate: TTSDelegate?
 
     @MainActor
@@ -67,6 +69,8 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
 
         // Stop any current speech
         stop()
+        let generation = synthesis.generation
+        try synthesis.check(generation)
 
         currentText = text
         isSpeaking = true
@@ -94,9 +98,14 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
         // Write text to temp file
         let tempTextFile = FileManager.default.temporaryDirectory.appendingPathComponent("tts_text_\(UUID().uuidString).txt")
         try text.write(to: tempTextFile, atomically: true, encoding: .utf8)
+        defer {
+            try? FileManager.default.removeItem(at: tempTextFile)
+            if synthesis.generation != generation { try? FileManager.default.removeItem(at: audioFile) }
+        }
 
         // Generate audio file using say command
         let generateProcess = Process()
+        synthesisProcess = generateProcess
         generateProcess.executableURL = URL(fileURLWithPath: "/usr/bin/say")
 
         // Note: For real-time playback, speed is controlled via AVAudioUnitTimePitch
@@ -135,6 +144,8 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
             }
         }
 
+        try synthesis.check(generation)
+
         // Clean up text file
         try? FileManager.default.removeItem(at: tempTextFile)
 
@@ -147,9 +158,11 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
         do {
             let aiffData = try Data(contentsOf: audioFile)
             if let m4aData = await AudioConverter.convertToAAC(inputData: aiffData, inputExtension: "aiff") {
+                try synthesis.check(generation)
                 lastAudioData = m4aData
                 _audioFileExtension = "m4a"
             } else {
+                try synthesis.check(generation)
                 // Fallback to AIFF if conversion fails
                 lastAudioData = aiffData
                 _audioFileExtension = "aiff"
@@ -158,6 +171,8 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
             dprint("MacOSTTS: Failed to read audio file for conversion: \(error.localizedDescription)")
 
         }
+
+        try synthesis.check(generation)
 
         // Set initial playback rate from selectedSpeed
         currentPlaybackRate = Float(selectedSpeed)
@@ -347,6 +362,9 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
 
     @MainActor
     func stop() {
+        synthesis.invalidate()
+        if synthesisProcess?.isRunning == true { synthesisProcess?.terminate() }
+        synthesisProcess = nil
         highlightTimer?.invalidate()
         highlightTimer = nil
 
@@ -419,8 +437,17 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
         return nil
     }
 
+    /// Cached voice list from `say -v ?`. Voices rarely change during app
+    /// lifetime, and the subprocess call blocks, so the result is cached to
+    /// avoid stalling the main thread on every speak call.
+    private var cachedSayVoiceList: [String]?
+
     /// Get list of available voices from `say -v ?`
     private func getAvailableVoices() -> [String] {
+        if let cached = cachedSayVoiceList {
+            return cached
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
         process.arguments = ["-v", "?"]
@@ -430,11 +457,15 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
 
         do {
             try process.run()
+            // Read before waiting: waiting first can deadlock if the output
+            // exceeds the pipe buffer.
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let output = String(data: data, encoding: .utf8) {
-                return output.components(separatedBy: .newlines)
+                let voices = output.components(separatedBy: .newlines)
+                cachedSayVoiceList = voices
+                return voices
             }
         } catch {
             // Ignore errors

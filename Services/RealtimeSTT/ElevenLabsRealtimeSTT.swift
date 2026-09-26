@@ -17,6 +17,9 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
 
     private var audioEngine: AVAudioEngine?
     private var webSocketTask: URLSessionWebSocketTask?
+    private var finishingWebSocketTask: URLSessionWebSocketTask?
+    private var connectionGeneration = UUID()
+    private var finalResponseReceived = false
     private var urlSession: URLSession?
 
     private let apiKeyManager = APIKeyManager.shared
@@ -28,6 +31,9 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
 
     // Accumulated committed text (ElevenLabs resets partial transcripts after each commit)
     private var committedText: String = ""
+    // Last committed segment - deduplication compares only against this, so that
+    // re-spoken phrases (e.g. "はい") that appeared earlier in history are not discarded
+    private var lastCommittedSegment: String = ""
     // Current partial text (not yet committed) - needed to preserve on stop
     private var currentPartialText: String = ""
 
@@ -49,12 +55,14 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Stop any existing session
         stopListening()
+        finishingWebSocketTask = nil
 
         isIntentionallyStopping = false
         reconnectAttempts = 0
 
         // Reset accumulated text
         committedText = ""
+        lastCommittedSegment = ""
         currentPartialText = ""
 
         // Connect WebSocket
@@ -73,7 +81,30 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         delegate?.realtimeSTT(self, didChangeListeningState: true)
     }
 
+    func finishListening() async {
+        guard isListening, let task = webSocketTask else { stopListening(); return }
+        let generation = connectionGeneration
+        isIntentionallyStopping = true
+        isListening = false
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        finalResponseReceived = false
+        let message: [String: Any] = ["message_type": "input_audio_chunk", "audio_base_64": "", "commit": true, "sample_rate": 16000]
+        if let data = try? JSONSerialization.data(withJSONObject: message),
+           let text = String(data: data, encoding: .utf8) {
+            try? await task.send(.string(text))
+        }
+        let deadline = Date().addingTimeInterval(1.5)
+        while !finalResponseReceived, generation == connectionGeneration, Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard generation == connectionGeneration else { return }
+        stopListening()
+    }
+
     func stopListening() {
+        connectionGeneration = UUID()
         isIntentionallyStopping = true
 
         // Stop audio engine
@@ -111,7 +142,8 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
     /// Process audio buffer from external source
     func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
         guard audioSource == .external, isListening else { return }
-        sendAudioBuffer(buffer)
+        let pcmData = convertBufferToPCMData(buffer, converter: audioConverter, outFormat: outputFormat)
+        sendPCMData(pcmData)
     }
 
     // MARK: - WebSocket Connection
@@ -146,7 +178,9 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         // a shorter threshold since true silence is rare there.
         let vadSilenceSecs = (audioSource == .external) ? "0.5" : "0.8"
 
-        var urlComponents = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime")!
+        guard var urlComponents = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime") else {
+            throw RealtimeSTTError.apiError("Invalid WebSocket URL")
+        }
         urlComponents.queryItems = [
             URLQueryItem(name: "model_id", value: model),
             URLQueryItem(name: "audio_format", value: audioFormat),
@@ -174,6 +208,7 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         urlSession = session
 
         let task = session.webSocketTask(with: request)
+        finishingWebSocketTask = nil
         webSocketTask = task
         sessionStarted = false
         task.resume()
@@ -211,18 +246,28 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         #endif
     }
 
+    private func acceptsMessages(from task: URLSessionWebSocketTask) -> Bool {
+        task === webSocketTask || task === finishingWebSocketTask
+    }
+
     private func startReceivingMessages() {
+        guard let task = webSocketTask else { return }
         Task { [weak self] in
-            while let self = self, let task = self.webSocketTask, task.state == .running {
+            while let self, self.acceptsMessages(from: task), task.state == .running {
                 do {
                     let message = try await task.receive()
+                    guard self.acceptsMessages(from: task) else { return }
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         if self.isListening && !self.isIntentionallyStopping {
+                            let generation = self.connectionGeneration
                             Task {
+                                guard generation == self.connectionGeneration else { return }
                                 await self.handleUnexpectedDisconnection()
                             }
                         } else if self.isListening {
@@ -236,6 +281,7 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
     }
 
     private func handleUnexpectedDisconnection() async {
+        let generation = connectionGeneration
         guard !isIntentionallyStopping, reconnectAttempts < maxReconnectAttempts else {
             if isListening {
                 // Send accumulated text before reporting error so it's not lost
@@ -263,22 +309,25 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         sessionStarted = false
 
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        guard isListening, !isIntentionallyStopping else { return }
+        guard generation == connectionGeneration, isListening, !isIntentionallyStopping else { return }
 
         do {
             guard let apiKey = apiKeyManager.getAPIKey(for: .elevenLabs) else {
                 throw RealtimeSTTError.apiError("API key not available")
             }
             try await connectWebSocket(apiKey: apiKey)
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             reconnectAttempts = 0
             dprint("ElevenLabsRealtimeSTT: Reconnected successfully")
 
         } catch {
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             dprint("ElevenLabsRealtimeSTT: Reconnect failed: \(error)")
 
             await handleUnexpectedDisconnection()
         }
     }
+
 
     private func handleWebSocketMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
@@ -324,6 +373,7 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
             }
 
         case "committed_transcript", "committed_transcript_with_timestamps":
+            finalResponseReceived = true
             if let text = json["text"] as? String, !text.isEmpty {
                 #if DEBUG
                 // Log detected language for debugging
@@ -334,16 +384,19 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
                 dprint("ElevenLabsRealtimeSTT: Current committedText: '\(committedText.suffix(100))...'")
                 #endif
 
-                // Deduplicate: check if this text is already part of our committed text
-                // This handles cases where ElevenLabs resends previously committed text
+                // Deduplicate: ElevenLabs sometimes resends previously committed text.
+                // Compare only against the most recent committed segment — searching the
+                // whole history would wrongly discard genuinely re-spoken phrases.
                 if committedText.isEmpty {
                     committedText = text
-                } else if !committedText.hasSuffix(text) && !committedText.contains(text) {
-                    // Only append if this text is genuinely new
-                    committedText += " " + text
-                } else {
+                    lastCommittedSegment = text
+                } else if text == lastCommittedSegment || lastCommittedSegment.hasSuffix(text) {
                     dprint("ElevenLabsRealtimeSTT: Skipped duplicate committed text")
 
+                } else {
+                    // Only append if this text is genuinely new
+                    committedText += " " + text
+                    lastCommittedSegment = text
                 }
 
                 // Clear partial text since it's now committed
@@ -407,15 +460,30 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
             audioConverter = AVAudioConverter(from: inputFormat, to: outFormat)
         }
 
+        // Capture converter and format for use in tap closure
+        let capturedConverter = audioConverter
+        let capturedFormat = outputFormat
+
         // Install tap to capture audio
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.sendAudioBuffer(buffer)
+            guard let self = self else { return }
 
-            // Update audio level monitor
+            // Extract samples for level monitoring
+            var samples: [Float]?
             if let channelData = buffer.floatChannelData {
                 let frameLength = Int(buffer.frameLength)
-                let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
-                self?.audioLevelMonitor.updateLevel(from: samples)
+                samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
+            }
+
+            // Convert audio data with resampling (can be done on background thread)
+            let pcmData = self.convertBufferToPCMData(buffer, converter: capturedConverter, outFormat: capturedFormat)
+
+            // Update UI and send data on main thread
+            DispatchQueue.main.async {
+                if let samples = samples {
+                    self.audioLevelMonitor.updateLevel(from: samples)
+                }
+                self.sendPCMData(pcmData)
             }
         }
 
@@ -423,12 +491,10 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         try audioEngine.start()
     }
 
-    private func sendAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard isListening, let webSocketTask = webSocketTask else { return }
-
-        let pcmData: Data
-
-        if let converter = audioConverter, let outFormat = outputFormat {
+    /// Convert buffer to PCM data with optional resampling
+    /// Parameters are passed to allow calling from background thread
+    nonisolated private func convertBufferToPCMData(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter?, outFormat: AVAudioFormat?) -> Data {
+        if let converter = converter, let outFormat = outFormat {
             // Need to convert format
             let ratio = outFormat.sampleRate / buffer.format.sampleRate
             let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
@@ -436,7 +502,7 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
             guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: outputFrameCapacity) else {
                 dprint("ElevenLabsRealtimeSTT: Failed to create output buffer (capacity: \(outputFrameCapacity))")
 
-                return
+                return Data()
             }
 
             var error: NSError?
@@ -448,17 +514,22 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
             if status == .error || error != nil {
                 dprint("ElevenLabsRealtimeSTT: Audio conversion failed - status: \(status.rawValue), error: \(error?.localizedDescription ?? "none")")
 
-                return
+                return Data()
             }
 
-            pcmData = bufferToData(outputBuffer)
+            return bufferToData(outputBuffer)
         } else if buffer.format.commonFormat == .pcmFormatInt16 {
             // Already in correct format
-            pcmData = bufferToData(buffer)
+            return bufferToData(buffer)
         } else {
             // Convert float to int16
-            pcmData = convertFloatBufferToInt16Data(buffer)
+            return convertFloatBufferToInt16Data(buffer)
         }
+    }
+
+    /// Send PCM data - must be called from main thread
+    private func sendPCMData(_ pcmData: Data) {
+        guard isListening, let webSocketTask = webSocketTask else { return }
 
         if pcmData.isEmpty {
             dprint("ElevenLabsRealtimeSTT: Empty PCM data after conversion")
@@ -482,13 +553,13 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
         }
     }
 
-    private func bufferToData(_ buffer: AVAudioPCMBuffer) -> Data {
+    nonisolated private func bufferToData(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let int16Data = buffer.int16ChannelData else { return Data() }
         let frameLength = Int(buffer.frameLength)
         return Data(bytes: int16Data[0], count: frameLength * 2)
     }
 
-    private func convertFloatBufferToInt16Data(_ buffer: AVAudioPCMBuffer) -> Data {
+    nonisolated private func convertFloatBufferToInt16Data(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let floatData = buffer.floatChannelData else { return Data() }
         let frameLength = Int(buffer.frameLength)
         var int16Data = [Int16](repeating: 0, count: frameLength)

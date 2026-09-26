@@ -58,6 +58,7 @@ final class SubtitleTranslationService {
     // MARK: - State
 
     /// Last known STT text
+    private var generation = UUID()
     private var lastSTTText: String = ""
 
     /// Context for LLM translation (recently translated sentences)
@@ -71,6 +72,9 @@ final class SubtitleTranslationService {
 
     /// Task for pause-based confirmation check
     private var pauseCheckTask: Task<Void, Never>?
+
+    /// Task for resetting error state after a delay
+    private var errorResetTask: Task<Void, Never>?
 
     /// Latest text waiting to be translated while a previous translation is in
     /// flight. When the in-flight translation completes and this differs from
@@ -92,7 +96,13 @@ final class SubtitleTranslationService {
     private var translationCache: [String: String] = [:]
     private var cacheKeys: [String] = []
 
-    private init() {}
+    private let makeTranslator: @MainActor (TranslationProvider, String) -> ContextualTranslator?
+
+    init(makeTranslator: @escaping @MainActor (TranslationProvider, String) -> ContextualTranslator? = {
+        ContextualTranslatorFactory.makeTranslator(for: $0, model: $1)
+    }) {
+        self.makeTranslator = makeTranslator
+    }
 
     // MARK: - Public Methods
 
@@ -142,15 +152,25 @@ final class SubtitleTranslationService {
 
     /// Reset service state (call when recording starts)
     func reset() {
+        generation = UUID()
         lastSTTText = ""
         contextSegments.removeAll()
         debounceTask?.cancel()
         debounceTask = nil
         pauseCheckTask?.cancel()
         pauseCheckTask = nil
+        errorResetTask?.cancel()
+        errorResetTask = nil
         pendingTranslationText = nil
         translator?.cancel()
         // Keep cache for potential reuse
+    }
+
+    func invalidate(appState: AppState) {
+        reset()
+        clearCache()
+        appState.subtitleTranslatedText = ""
+        appState.subtitleTranslationState = .idle
     }
 
     /// Clear all state including cache
@@ -187,10 +207,7 @@ final class SubtitleTranslationService {
             // (selectedTranslationModel might be for a different provider)
             let modelToUse = provider.defaultModelId
 
-            translator = ContextualTranslatorFactory.makeTranslator(
-                for: provider,
-                model: modelToUse
-            )
+            translator = makeTranslator(provider, modelToUse)
             currentProvider = provider
 
             #if DEBUG
@@ -251,7 +268,10 @@ final class SubtitleTranslationService {
         }
 
         // Check cache first
-        let cacheKey = makeCacheKey(text: text, language: appState.translationTargetLanguage)
+        let token = generation
+        let provider = appState.translationProvider
+        let language = appState.translationTargetLanguage
+        let cacheKey = "\(provider.rawValue):" + makeCacheKey(text: text, language: language)
         if let cached = translationCache[cacheKey] {
             appState.subtitleTranslatedText = cached
             dprint("SubtitleTranslation: Cache hit for '\(text.prefix(20))...'")
@@ -274,6 +294,7 @@ final class SubtitleTranslationService {
                 to: appState.translationTargetLanguage
             )
 
+            guard isCurrent(token, provider: provider, language: language, appState: appState) else { return }
             // Validate translation result - don't cache empty results
             guard !translated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 dprint("SubtitleTranslation: Empty translation result, skipping cache")
@@ -305,12 +326,14 @@ final class SubtitleTranslationService {
                 dprint("SubtitleTranslation: Draining queued pending translation")
                 Task { [weak self, weak appState] in
                     guard let self = self, let appState = appState else { return }
+                    guard self.isCurrent(token, provider: provider, language: language, appState: appState) else { return }
                     await self.translateFullText(pending, appState: appState)
                 }
             } else {
                 pendingTranslationText = nil
             }
         } catch {
+            guard isCurrent(token, provider: provider, language: language, appState: appState) else { return }
             dprint("SubtitleTranslation: Error: \(error)")
 
 
@@ -324,13 +347,20 @@ final class SubtitleTranslationService {
 
             // Reset error state after delay
             let resetDelay = errorResetDelay
-            Task { @MainActor [weak appState] in
+            errorResetTask?.cancel()
+            errorResetTask = Task { @MainActor [weak appState] in
                 try? await Task.sleep(nanoseconds: resetDelay)
+                guard !Task.isCancelled else { return }
                 if case .error = appState?.subtitleTranslationState {
                     appState?.subtitleTranslationState = .idle
                 }
             }
         }
+    }
+
+    private func isCurrent(_ token: UUID, provider: TranslationProvider, language: LanguageCode, appState: AppState) -> Bool {
+        !Task.isCancelled && token == generation && appState.subtitleTranslationEnabled
+            && appState.translationProvider == provider && appState.translationTargetLanguage == language
     }
 
     /// Start periodic check for pause-based translation trigger

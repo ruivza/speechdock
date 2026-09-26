@@ -4,9 +4,11 @@
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <false/>
+    <!-- Required for microphone access when signed with the Hardened
+         Runtime (project.yml: ENABLE_HARDENED_RUNTIME = YES). This is a
+         Hardened Runtime resource-access entitlement, not sandbox-only —
+         removing it can deny mic access in notarized release builds. -->
     <key>com.apple.security.device.audio-input</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
     <true/>
 </dict>
 </plist>

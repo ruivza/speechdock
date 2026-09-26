@@ -166,7 +166,7 @@ tell application "SpeechDock"
 end tell
 ```
 
-Returns the transcribed text, or empty if nothing was transcribed. Returns error if not currently recording.
+Waits for final recognition (up to 1.5 seconds for cloud and older system recognition), then returns the latest text. Returns an empty string if there is no text, or error 1026 if not recording.
 
 ### toggle quick transcription
 
@@ -179,6 +179,19 @@ end tell
 ```
 
 If not recording, starts recording. If recording, stops and pastes the transcribed text.
+
+### Panels, subtitles, and OCR
+
+| Command | Action |
+|---|---|
+| `show quick transcription` | Show the mic button without starting recording |
+| `show stt panel` | Show the STT panel, respecting the auto-start setting; move floating panels using the top handle |
+| `toggle stt panel` | Toggle the STT panel |
+| `show tts panel` | Show the TTS panel for text input; move floating panels using the top handle |
+| `toggle tts panel` | Toggle the TTS panel |
+| `show subtitle` | Enable subtitles and start recording if stopped; move the overlay using the top handle |
+| `toggle subtitle` | Toggle subtitle mode |
+| `start ocr` | Select a screen region and send recognized text to the TTS panel |
 
 ## Properties
 
@@ -321,17 +334,19 @@ end tell
 
 ### Save audio in multiple speeds
 
+macOS synthesis applies speed to exported audio. Gemini and the current OpenAI model apply speed only during playback.
+
 ```applescript
 tell application "SpeechDock"
-    set tts provider to "OpenAI"
-    set tts voice to "nova"
+    set tts provider to "macOS"
+    set tts voice to ""
 
     set speeds to {0.8, 1.0, 1.2, 1.5}
     set textToSpeak to "This is a speed comparison test for text to speech."
 
     repeat with spd in speeds
         set tts speed to spd
-        save audio textToSpeak to file ("/tmp/speed_" & spd & ".mp3")
+        save audio textToSpeak to file ("/tmp/speed_" & spd & ".m4a")
     end repeat
 end tell
 ```
@@ -404,8 +419,7 @@ All errors include a human-readable message explaining the issue and how to fix 
 
 | Code | Description |
 |------|-------------|
-| 1000 | Internal error |
-| 1001 | Invalid parameter |
+| 1002 | App initialization timed out |
 
 ### TTS (1010–1019)
 
@@ -414,8 +428,6 @@ All errors include a human-readable message explaining the issue and how to fix 
 | 1010 | Empty text provided |
 | 1011 | Not currently speaking (cannot pause) |
 | 1012 | Not currently paused (cannot resume) |
-| 1013 | Already speaking |
-| 1014 | TTS provider error |
 | 1015 | Save path is invalid |
 | 1016 | Save directory does not exist |
 | 1017 | Save operation failed |
@@ -440,14 +452,11 @@ All errors include a human-readable message explaining the issue and how to fix 
 | 1030 | Empty text provided |
 | 1031 | Invalid or unknown language name |
 | 1032 | Translation failed |
-| 1033 | Translation provider unavailable (macOS 26+ required) |
 
 ### Provider/Settings (1040–1049)
 
 | Code | Description |
 |------|-------------|
-| 1040 | Invalid provider name |
-| 1042 | Invalid speed value (must be 0.25–4.0) |
 | 1043 | API key not configured (message includes the env var name) |
 
 ### Clipboard (1050–1059)
@@ -455,7 +464,6 @@ All errors include a human-readable message explaining the issue and how to fix 
 | Code | Description |
 |------|-------------|
 | 1050 | Empty text provided |
-| 1051 | Paste operation failed |
 
 ## Notes
 

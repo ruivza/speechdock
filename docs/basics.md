@@ -10,7 +10,7 @@ nav_order: 2
 
 SpeechDock makes macOS TTS/STT more flexible and accessible. While macOS includes powerful speech recognition and synthesis engines, there's no convenient way to use them. SpeechDock fills this gap — a menu bar application that makes TTS and STT accessible from anywhere on your Mac.
 
-It works immediately after installation with no API keys or additional downloads required.
+It works immediately after installation with no API keys required; a language model may need to download on first use.
 
 ## Installation
 
@@ -141,9 +141,8 @@ Uses the macOS Vision Framework for text recognition.
 Display real-time transcription as a floating subtitle overlay:
 
 - **Floating subtitles** — Appears on top of all windows
-- **Click-through** — Doesn't interfere with your work
 - **Customizable** — Font size, opacity, max lines, position
-- **Draggable** — Position anywhere on screen
+- **Draggable** — Drag the top handle to move the overlay
 - **Real-time translation** — Optionally translate subtitles as you speak
 
 Toggle with hotkey (default: `Ctrl + Option + S`), from the STT panel, or from the menu bar.
@@ -266,8 +265,8 @@ Panel shortcuts can be customized with modifier key support in **Settings** > **
 
 Choose in **Settings** > **Appearance**:
 
-- **Floating** — Always-on-top borderless panel, draggable from anywhere
-- **Standard Window** — Regular macOS window with title bar
+- **Floating** — Always-on-top borderless panel; drag the top handle to move it
+- **Standard Window** — Regular macOS window; drag its title bar to move it
 
 Only one panel (STT or TTS) can be open at a time. Opening one closes the other.
 

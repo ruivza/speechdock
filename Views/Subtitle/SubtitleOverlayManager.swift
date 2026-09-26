@@ -106,7 +106,7 @@ final class SubtitleOverlayManager {
         window.backgroundColor = .clear
         window.level = Self.subtitleWindowLevel
         window.ignoresMouseEvents = false  // Allow mouse interaction for dragging
-        window.isMovableByWindowBackground = true  // Allow dragging by background
+        window.isMovableByWindowBackground = false // Explicit handle in SubtitleOverlayView.
         window.hasShadow = false
         // Remove .stationary to allow free movement
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

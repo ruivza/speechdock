@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Quick transcription displays recording errors beside the floating mic button.
+
+### Changed
+- Gemini TTS now offers only Gemini 3.8 Flash TTS (default) and Flash-Lite TTS. Previous Gemini TTS model selections reset to the default.
+- Unsupported or empty saved STT, TTS, and translation model selections reset to the current provider default.
+- Gemini playback speed can be adjusted locally; exported audio keeps its original pace.
+
+### Fixed
+- Fixed floating STT, TTS, and subtitle windows not moving on macOS 27. Drag the handle at the top of each window; standard windows still move by their title bars.
+- Improved audio capture reliability for devices with multiple streams and kept speech-recognition audio conversion in a serial pipeline.
+- File transcription retries transient network and server errors, and cancels outstanding recognition when stopped.
+- Corrected OCR coordinates on multiple displays and screen-recording permission checks.
+- Preserved pending preference changes when quitting and prevented recording from starting after cancellation during preparation.
+- Corrected cursor placement after inserting text containing emoji and preserved literal dollar signs in text replacement settings.
+- Fixed TTS crashes when highlighting text containing emoji or combining characters.
+- Stopping speech during generation prevents delayed playback and stale status updates.
+- Saved audio respects changes to model, voice, speed, language, and text replacement settings.
+- Quick transcription waits for trailing recognition results before pasting and returning text to AppleScript.
+- Corrected FLAC, AAC, and AIFF identification when uploading audio for transcription.
+- Prevented stale subtitle translations, WebSocket messages, and playback callbacks from changing a newer session.
+- Temporary audio files remain available for the lifetime of playback.
+- The AppleScript `show subtitle` command starts recording even if subtitle mode is already enabled.
+- Updated the English and Japanese guides to match available models and settings.
+
+### Security
+- Gemini HTTP requests send API keys in authentication headers instead of request URLs.
+- Updating a stored API key preserves the previous key if the Keychain update fails.
+- The notarization script supports Keychain credential profiles.
+
 ## [0.1.38] - 2026-07-14
 
 ### Fixed

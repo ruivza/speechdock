@@ -78,7 +78,7 @@ struct CustomShortcut: Codable, Equatable {
         return parts.joined()
     }
 
-    /// Check if shortcut is valid (has at least command modifier and a key)
+    /// Check if shortcut is valid (has at least one modifier and a key)
     var isValid: Bool {
         keyCode != 0 && modifiers != 0
     }

@@ -4,6 +4,7 @@ import Foundation
 /// ElevenLabs TTS API implementation with streaming support
 @MainActor
 final class ElevenLabsTTS: NSObject, TTSService {
+    private let synthesis = SynthesisLifecycle()
     weak var delegate: TTSDelegate?
 
     var isSpeaking: Bool {
@@ -104,6 +105,8 @@ final class ElevenLabsTTS: NSObject, TTSService {
 
     /// Streaming playback - starts playing as soon as first chunks arrive
     private func speakStreaming(text: String, apiKey: String) async throws {
+        let generation = synthesis.generation
+        try synthesis.check(generation)
         accumulatedPCMData = Data()
 
         // Build API request for PCM streaming
@@ -153,6 +156,7 @@ final class ElevenLabsTTS: NSObject, TTSService {
 
         // Stream response using URLSession.bytes
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        try synthesis.check(generation)
 
         // Check response status
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -165,6 +169,7 @@ final class ElevenLabsTTS: NSObject, TTSService {
             // Try to read error message
             var errorData = Data()
             for try await byte in bytes {
+                try synthesis.check(generation)
                 errorData.append(byte)
                 if errorData.count > 1024 { break }
             }
@@ -176,42 +181,56 @@ final class ElevenLabsTTS: NSObject, TTSService {
         var chunkBuffer = Data()
         let chunkSize = 4800  // ~100ms of audio at 24kHz mono 16-bit
 
-        for try await byte in bytes {
-            chunkBuffer.append(byte)
+        do {
+            for try await byte in bytes {
+                try synthesis.check(generation)
+                chunkBuffer.append(byte)
 
-            // Send chunks to player when buffer is full
-            if chunkBuffer.count >= chunkSize {
+                // Send chunks to player when buffer is full
+                if chunkBuffer.count >= chunkSize {
+                    streamingPlayer.appendData(chunkBuffer)
+                    accumulatedPCMData.append(chunkBuffer)
+                    chunkBuffer = Data()
+                }
+            }
+
+            // Send any remaining data
+            if !chunkBuffer.isEmpty {
                 streamingPlayer.appendData(chunkBuffer)
                 accumulatedPCMData.append(chunkBuffer)
-                chunkBuffer = Data()
             }
-        }
 
-        // Send any remaining data
-        if !chunkBuffer.isEmpty {
-            streamingPlayer.appendData(chunkBuffer)
-            accumulatedPCMData.append(chunkBuffer)
-        }
-
-        // Signal end of stream
-        streamingPlayer.finishStream()
-        dprint("ElevenLabs TTS: Streaming complete, total bytes: \(accumulatedPCMData.count)")
+            // Signal end of stream
+            streamingPlayer.finishStream()
+            dprint("ElevenLabs TTS: Streaming complete, total bytes: \(accumulatedPCMData.count)")
 
 
-        // Convert accumulated PCM to M4A for saving (await to ensure lastAudioData is ready for Save Audio)
-        if !accumulatedPCMData.isEmpty {
-            if let m4aData = await convertPCMToM4A(accumulatedPCMData) {
-                lastAudioData = m4aData
-                dprint("ElevenLabs TTS: Converted to M4A, size: \(m4aData.count) bytes")
+            // Convert accumulated PCM to M4A for saving (await to ensure lastAudioData is ready for Save Audio)
+            if !accumulatedPCMData.isEmpty {
+                if let m4aData = await convertPCMToM4A(accumulatedPCMData) {
+                    try synthesis.check(generation)
+                    lastAudioData = m4aData
+                    dprint("ElevenLabs TTS: Converted to M4A, size: \(m4aData.count) bytes")
 
+                }
+                try synthesis.check(generation)
+                // Clear accumulated PCM data to free memory (M4A is now stored in lastAudioData)
+                accumulatedPCMData = Data()
             }
-            // Clear accumulated PCM data to free memory (M4A is now stored in lastAudioData)
+        } catch {
+            guard synthesis.generation == generation else { throw CancellationError() }
+            // Mid-stream failure: stop the player, free buffered audio, and notify the delegate
+            streamingPlayer.stop()
             accumulatedPCMData = Data()
+            delegate?.tts(self, didFailWithError: error)
+            throw error
         }
     }
 
     /// Non-streaming playback - waits for full audio before playing
     private func speakNonStreaming(text: String, apiKey: String) async throws {
+        let generation = synthesis.generation
+        try synthesis.check(generation)
         // Prepare text for highlighting
         playbackController.prepareText(text)
 
@@ -262,6 +281,7 @@ final class ElevenLabsTTS: NSObject, TTSService {
 
         // Perform request with retry logic for transient errors
         let (data, _) = try await TTSAPIHelper.performRequest(request, providerName: "ElevenLabs")
+        try synthesis.check(generation)
 
         // Store audio data for saving
         lastAudioData = data
@@ -290,6 +310,7 @@ final class ElevenLabsTTS: NSObject, TTSService {
     }
 
     func stop() {
+        synthesis.invalidate()
         streamingPlayer.stop()
         playbackController.stopPlayback()
     }

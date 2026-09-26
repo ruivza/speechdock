@@ -23,6 +23,16 @@ final class FloatingMicTextHUD {
 
     private let positionKey = FloatingMicConstants.hudPositionKey
 
+    /// Auto-dismiss timer for the error HUD, cancelled if the HUD is replaced
+    /// or hidden first so a stale task can never close a newer HUD.
+    private var autoHideTask: Task<Void, Never>?
+
+    /// True while the HUD is showing an error instead of transcription text
+    private(set) var isShowingError = false
+
+    /// How long an error stays on screen before dismissing itself
+    private let errorDisplayDuration: TimeInterval = 5
+
     private init() {}
 
     // MARK: - Show/Hide
@@ -32,6 +42,11 @@ final class FloatingMicTextHUD {
     }
 
     func show(near buttonFrame: NSRect) {
+        // An error HUD may still be on screen from a previous attempt; replace
+        // it so starting a new recording always shows the transcription HUD.
+        if isShowingError {
+            hide()
+        }
         guard hudWindow == nil else { return }
 
         // Use saved position or default to above the button
@@ -58,7 +73,54 @@ final class FloatingMicTextHUD {
         self.hudWindow = window
     }
 
+    /// Show an error in place of the transcription HUD.
+    ///
+    /// Quick-mic recording has no panel to fall back on, so without this a
+    /// failure (expired API key, inactive billing, lost connection) would just
+    /// stop the mic silently with nothing explaining why. Auto-dismisses so it
+    /// can never become stuck UI.
+    func showError(_ message: String, near buttonFrame: NSRect) {
+        // Replace whatever is on screen (recording HUD or an earlier error)
+        hide()
+
+        let hudFrame = savedFrameOrDefault(near: buttonFrame)
+
+        let window = NSPanel(
+            contentRect: hudFrame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating + 1
+        window.hasShadow = true
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.isReleasedWhenClosed = false
+
+        let contentView = FloatingMicTextHUDView(manager: self, errorMessage: message)
+        window.contentView = NSHostingView(rootView: contentView)
+        window.orderFrontRegardless()
+
+        self.hudWindow = window
+        self.isShowingError = true
+
+        logger.error("Showing STT error in HUD: \(message, privacy: .public)")
+
+        autoHideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((self?.errorDisplayDuration ?? 5) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            // Only dismiss if we're still showing the same error HUD
+            guard self?.isShowingError == true else { return }
+            self?.hide()
+        }
+    }
+
     func hide() {
+        autoHideTask?.cancel()
+        autoHideTask = nil
+        isShowingError = false
         saveWindowPosition()
         hudWindow?.orderOut(nil)
         hudWindow = nil
@@ -245,6 +307,8 @@ final class FloatingMicTextHUD {
 
 struct FloatingMicTextHUDView: View {
     let manager: FloatingMicTextHUD
+    /// When non-nil the HUD shows this error instead of transcription text
+    var errorMessage: String?
     @State private var text: String = ""
     @State private var isDragging = false
 
@@ -264,6 +328,70 @@ struct FloatingMicTextHUDView: View {
     }
 
     var body: some View {
+        Group {
+            if let errorMessage {
+                errorContent(errorMessage)
+            } else {
+                transcriptionContent
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.75))
+        )
+        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 3)
+                .onChanged { _ in
+                    if !isDragging {
+                        isDragging = true
+                        manager.startDragging()
+                    }
+                    manager.continueDragging()
+                }
+                .onEnded { _ in
+                    manager.finishDragging()
+                    isDragging = false
+                }
+        )
+        .onReceive(NotificationCenter.default.publisher(for: FloatingMicConstants.transcriptionUpdatedNotification)) { notification in
+            if let newText = notification.object as? String {
+                text = newText
+            }
+        }
+    }
+
+    /// Error layout: the quick-mic path has no panel, so this is the only
+    /// place the user learns why recording stopped.
+    private func errorContent(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                Text("Transcription failed")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                Spacer()
+            }
+
+            ScrollView(.vertical, showsIndicators: false) {
+                Text(message)
+                    .font(.system(size: fontSize))
+                    .foregroundColor(.white.opacity(0.9))
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(maxHeight: maxTextHeight)
+        }
+    }
+
+    private var transcriptionContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Header with recording indicator and stop shortcut
             HStack(spacing: 6) {
@@ -307,34 +435,6 @@ struct FloatingMicTextHUDView: View {
                         proxy.scrollTo("hudText", anchor: .bottom)
                     }
                 }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.75))
-        )
-        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 3)
-                .onChanged { _ in
-                    if !isDragging {
-                        isDragging = true
-                        manager.startDragging()
-                    }
-                    manager.continueDragging()
-                }
-                .onEnded { _ in
-                    manager.finishDragging()
-                    isDragging = false
-                }
-        )
-        .onReceive(NotificationCenter.default.publisher(for: FloatingMicConstants.transcriptionUpdatedNotification)) { notification in
-            if let newText = notification.object as? String {
-                text = newText
             }
         }
     }

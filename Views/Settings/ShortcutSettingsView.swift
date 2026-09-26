@@ -95,11 +95,13 @@ struct ShortcutSettingsView: View {
                         ocrKeyCombo = .ocrDefault
                         subtitleKeyCombo = .subtitleDefault
                         shortcutHUDKeyCombo = .shortcutHUDDefault
+                        quickTranscriptionKeyCombo = .quickTranscriptionDefault
                         appState.hotKeyService?.sttKeyCombo = .sttDefault
                         appState.hotKeyService?.ttsKeyCombo = .ttsDefault
                         appState.hotKeyService?.ocrKeyCombo = .ocrDefault
                         appState.hotKeyService?.subtitleKeyCombo = .subtitleDefault
                         appState.hotKeyService?.shortcutHUDKeyCombo = .shortcutHUDDefault
+                        appState.hotKeyService?.quickTranscriptionKeyCombo = .quickTranscriptionDefault
                     }
 
                     Button("Reset Panel Shortcuts") {

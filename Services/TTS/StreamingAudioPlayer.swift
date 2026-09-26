@@ -17,6 +17,7 @@ final class StreamingAudioPlayer {
     }
 
     private(set) var state: State = .idle
+    private var generation = UUID()
 
     var isSpeaking: Bool { state == .playing }
     var isPaused: Bool { state == .paused }
@@ -90,6 +91,7 @@ final class StreamingAudioPlayer {
             throw TTSError.audioError("Already streaming")
         }
 
+        generation = UUID()
         // Reset state
         pendingData = Data()
         scheduledBufferCount = 0
@@ -200,6 +202,11 @@ final class StreamingAudioPlayer {
         // If no buffers were scheduled, or all buffers have already completed, finish immediately
         // This handles the race condition where buffer callbacks fire before finishStream() is called
         if scheduledBufferCount == 0 || completedBufferCount >= scheduledBufferCount {
+            // Zero-byte stream: onPlaybackStarted was never fired, so fire it
+            // here to keep the start/finish callback pairing consistent.
+            if scheduledBufferCount == 0 {
+                onPlaybackStarted?()
+            }
             handlePlaybackComplete()
         }
     }
@@ -220,6 +227,7 @@ final class StreamingAudioPlayer {
 
     /// Stop playback and cleanup
     func stop() {
+        generation = UUID()
         playerNode?.stop()
         audioEngine?.stop()
 
@@ -253,7 +261,11 @@ final class StreamingAudioPlayer {
         guard let player = playerNode, state == .playing || state == .paused else { return }
 
         // Calculate frame count (16-bit mono = 2 bytes per frame)
-        let frameCount = AVAudioFrameCount(data.count / 2)
+        // Round down to an even byte count: an odd trailing byte is half a
+        // sample and cannot be represented, so it is dropped explicitly here
+        // (only possible on the final chunk of the stream).
+        let byteCount = data.count - (data.count % 2)
+        let frameCount = AVAudioFrameCount(byteCount / 2)
         guard frameCount > 0 else { return }
 
         guard let buffer = AVAudioPCMBuffer(pcmFormat: pcmFormat, frameCapacity: frameCount) else {
@@ -264,11 +276,11 @@ final class StreamingAudioPlayer {
 
         buffer.frameLength = frameCount
 
-        // Copy PCM data to buffer
+        // Copy PCM data to buffer (only the even byteCount fits the buffer)
         data.withUnsafeBytes { rawBufferPointer in
             guard let srcPtr = rawBufferPointer.baseAddress else { return }
             if let dstPtr = buffer.int16ChannelData?[0] {
-                memcpy(dstPtr, srcPtr, data.count)
+                memcpy(dstPtr, srcPtr, byteCount)
             }
         }
 
@@ -276,9 +288,11 @@ final class StreamingAudioPlayer {
         totalSamplesScheduled += Int64(frameCount)
 
         // Schedule buffer with completion callback
+        let token = generation
         player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.handleBufferCompleted()
+                guard let self, self.generation == token else { return }
+                self.handleBufferCompleted()
             }
         }
     }

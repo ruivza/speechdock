@@ -35,8 +35,6 @@ final class LLMTranslation: TranslationServiceProtocol {
 
             throw TranslationError.apiError("API key not configured for \(provider.displayName)")
         }
-        dprint("LLMTranslation: API key found, length=\(apiKey.count)")
-
 
         // Detect source language to check for same-language translation
         if sourceLanguage == nil || sourceLanguage == .auto {
@@ -186,7 +184,6 @@ final class LLMTranslation: TranslationServiceProtocol {
               let message = firstChoice["message"] as? [String: Any],
               let content = message["content"] as? String else {
             dprint("OpenAI Translation: Invalid response format")
-            dprint("OpenAI Translation: Raw response = \(String(data: data, encoding: .utf8) ?? "nil")")
 
             throw TranslationError.apiError("Invalid response format from OpenAI")
         }
@@ -223,16 +220,12 @@ final class LLMTranslation: TranslationServiceProtocol {
             ]
         ]
 
-        guard var urlComponents = URLComponents(string: endpoint) else {
+        guard let url = URL(string: endpoint) else {
             throw TranslationError.apiError("Invalid Gemini API endpoint URL")
-        }
-        urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-
-        guard let url = urlComponents.url else {
-            throw TranslationError.apiError("Failed to construct Gemini API URL")
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         request.timeoutInterval = 60
@@ -257,7 +250,6 @@ final class LLMTranslation: TranslationServiceProtocol {
               let content = candidates.first?["content"] as? [String: Any],
               let parts = content["parts"] as? [[String: Any]] else {
             dprint("Gemini Translation: Invalid response format")
-            dprint("Gemini Translation: Raw response = \(String(data: data, encoding: .utf8) ?? "nil")")
             throw TranslationError.apiError("Invalid response format from Gemini")
         }
 
@@ -267,7 +259,6 @@ final class LLMTranslation: TranslationServiceProtocol {
             .joined()
         guard !answerText.isEmpty else {
             dprint("Gemini Translation: No non-thought text parts in response")
-            dprint("Gemini Translation: Raw response = \(String(data: data, encoding: .utf8) ?? "nil")")
             throw TranslationError.apiError("Invalid response format from Gemini")
         }
         dprint("Gemini Translation: Success, content length = \(answerText.count)")
@@ -325,7 +316,6 @@ final class LLMTranslation: TranslationServiceProtocol {
               let message = firstChoice["message"] as? [String: Any],
               let content = message["content"] as? String else {
             dprint("Grok Translation: Invalid response format")
-            dprint("Grok Translation: Raw response = \(String(data: data, encoding: .utf8) ?? "nil")")
 
             throw TranslationError.apiError("Invalid response format from Grok")
         }

@@ -49,10 +49,12 @@ APIキーはmacOSキーチェーンに安全に保存されます。開発時に
 
 | プロバイダ | モデル | 音声 |
 |----------|--------|--------|
-| **OpenAI** | GPT-4o Mini TTS、TTS-1、TTS-1 HD | alloy、echo、fable、onyx、nova、shimmer |
-| **Google Gemini** | Gemini 3.1 Flash TTS (Preview) | 30の多言語音声（Zephyr、Kore、Puck など） |
+| **OpenAI** | GPT-4o Mini TTS (Dec 2025) | alloy、echo、fable、onyx、nova、shimmer |
+| **Google Gemini** | Gemini 3.8 Flash TTS（既定）, Gemini 3.8 Flash-Lite TTS | 30の多言語音声（Zephyr、Kore、Puck など） |
 | **ElevenLabs** | Eleven v3、Eleven Flash v2.5 | 豊富な音声ライブラリ |
-| **Grok** | Grok TTS | eve、ara、rex、sal、leo（20以上の言語を自動検出） |
+| **Grok** | Grok TTS | eve、ara、rex、sal、leoなど26音声（25以上の言語を自動検出） |
+
+Gemini TTS の再生速度は0.5〜2.0倍に調整できます。保存音声は元の速度を保ちます。
 
 ### 音声タグ（表現マークアップ）
 
@@ -60,7 +62,7 @@ APIキーはmacOSキーチェーンに安全に保存されます。開発時に
 
 | プロバイダ | インラインタグ | ラップタグ | 例 |
 |----------|-------------|---------------|---------|
-| **Gemini 3.1 Flash TTS** | `[whispers]`、`[excited]`、`[sighs]`、`[laughs]`、`[sarcastic]`、`[crying]`、`[tired]` ほか | — | `Welcome! [excited] Let's go.` |
+| **Gemini 3.8 TTS** | `[whispers]`、`[excited]`、`[sighs]`、`[laughs]`、`[sarcastic]`、`[crying]`、`[tired]` ほか | — | `Welcome! [excited] Let's go.` |
 | **Grok TTS** | `[pause]`、`[long-pause]`、`[laugh]`、`[sigh]`、`[gulp]`、`[inhale]`、`[exhale]` | `<soft>`、`<loud>`、`<slow>`、`<fast>`、`<whisper>`、`<sing>` | `I have <whisper>a secret</whisper>.` |
 | **ElevenLabs v3** | `[laughs]`、`[sighs]`、`[whispers]`、`[excited]`、`[tired]` ほか | — | `That was hilarious! [laughs]` |
 
@@ -87,12 +89,12 @@ TTS再生を任意の音声出力デバイス（スピーカー、ヘッドフ�
 
 | プロバイダ | 形式 | 最大サイズ | 最大長 | API |
 |----------|---------|----------|--------------|-----|
-| **macOS**（26+） | MP3、WAV、M4A、AAC、AIFF、FLAC、MP4 | 500 MB | 無制限 | SpeechAnalyzer（オフライン） |
+| **macOS**（26+） | MP3、WAV、M4A、AAC、AIFF、FLAC、MP4 | 100 MB | 無制限 | SpeechAnalyzer（必要に応じてシステム音声認識へ切り替え） |
 | **OpenAI** | MP3、WAV、M4A、FLAC、WebM、MP4 | 25 MB | 無制限 | Whisper |
 | **Gemini** | MP3、WAV、AAC、OGG、FLAC | 20 MB | 約10分 | generateContent |
 | **ElevenLabs** | MP3、WAV、M4A、OGG、FLAC | 25 MB | 約2時間 | Scribe v2 |
 
-**注意**: macOSネイティブのファイル文字起こしにはmacOS 26以降が必要です。音声はすべてデバイス上で処理され、APIキーやインターネット接続は不要です。
+**注意**: macOSのファイル文字起こしにはmacOS 26以降が必要です。APIキーは不要です。SpeechAnalyzer対応言語はデバイス上で処理し、代替の音声認識ではAppleのサーバーとインターネット接続を使用する場合があります。
 
 ### 文字起こしの方法
 
@@ -114,25 +116,18 @@ macOSのオンデバイス翻訳は約18言語をサポートしていますが�
 | プロバイダ | モデル | 備考 |
 |----------|--------|-------|
 | **macOS**（デフォルト） | System | オンデバイス、APIキー不要、macOS 26以降 |
-| **OpenAI** | GPT-5 Nano（デフォルト）、GPT-5 Mini、GPT-5.2 | 高速、高品質 |
-| **Gemini** | Gemini 3 Flash（デフォルト）、Gemini 3 Pro | 高速、多言語対応 |
-| **Grok** | Grok 3 Fast（デフォルト）、Grok 3 Mini Fast | 高速翻訳 |
+| **OpenAI** | GPT-5.4 Mini（デフォルト）、GPT-5.4 Nano | 高速、高品質 |
+| **Gemini** | Gemini 3.1 Flash Lite（デフォルト）、Gemini 3.1 Pro (Preview) | 高速、多言語対応 |
+| **Grok** | Grok 4.20 Fast（デフォルト）、Grok 4.20 Fast (Reasoning) | 高速翻訳 |
 
 ### 翻訳プロバイダの切り替え
 
 - **設定** > **翻訳**: デフォルトのプロバイダとモデルを設定
 - **パネル**: 翻訳コントロールの横にある`⚡`ボタンをクリックしてクイック切り替え
 
-### プロバイダの自動同期
+### 翻訳プロバイダの選択
 
-STTまたはTTSプロバイダを切り替えると、翻訳プロバイダが自動的に同期されます：
-
-| STT/TTSプロバイダ | 翻訳プロバイダ |
-|------------------|---------------------|
-| OpenAI | OpenAI |
-| Gemini | Gemini |
-| Grok | Grok |
-| ElevenLabs / macOS | macOS |
+翻訳プロバイダはSTT/TTSとは独立した設定です。STTやTTSのプロバイダを変更しても自動では切り替わりません。設定または翻訳コントロールから選択してください。
 
 ## 字幕リアルタイム翻訳
 
@@ -149,10 +144,10 @@ STTまたはTTSプロバイダを切り替えると、翻訳プロバイダが�
 
 | プロバイダ | デバウンス | 最適な用途 |
 |----------|----------|----------|
-| **macOS** | 300ms | 高速、ローカル、プライバシー重視 |
-| **OpenAI** | 800ms | 高品質、多言語対応 |
-| **Gemini** | 600ms | 速度と品質のバランス |
-| **Grok** | 800ms | 高速翻訳 |
+| **macOS** | 200ms | 高速、ローカル、プライバシー重視 |
+| **OpenAI** | 400ms | 高品質、多言語対応 |
+| **Gemini** | 350ms | 速度と品質のバランス |
+| **Grok** | 350ms | 高速翻訳 |
 
 **注意**: 字幕翻訳は最適なパフォーマンスのためにプロバイダのデフォルトモデルを使用します。これはパネル翻訳設定で選択されたモデルとは独立しています。
 
@@ -186,11 +181,11 @@ STTとTTSの両方で、すべてのクラウドプロバイダで言語選択�
 |----------|-----------|-------|-------|
 | OpenAI | — | — | GPT-4o Mini TTSは速度パラメータ非対応。再生時にローカルで速度調整 |
 | ElevenLabs | `voice_settings.speed` | 0.7〜1.2 | アプリの範囲からマッピング |
-| Gemini | — | — | Gemini 3.1 Flash TTSは速度パラメータ非対応。`[pause]` などのタグで間合いを表現 |
+| Gemini | — | 0.5〜2.0（再生） | Gemini 3.8 TTS はローカル再生速度のみ変更。保存音声は元の速度のまま。本文に速度指示は追加しません |
 | macOS | 1分あたりの単語数 | 50〜500 | 基準175 wpm |
 | Grok | — | — | 速度パラメータ非対応。`<slow>...</slow>` や `<fast>...</fast>` でラップしてペース調整 |
 
-リアルタイム再生では、対応プロバイダについて速度はオーディオ処理によってローカルで制御され、再生中に動的に調整できます。API速度パラメータ非対応のプロバイダ（OpenAI GPT-4o Mini TTS、Gemini 3.1、Grok TTS）では速度スライダーが無効化されます。
+リアルタイム再生では、対応プロバイダについて速度はオーディオ処理によってローカルで制御され、再生中に動的に調整できます。API速度パラメータ非対応のプロバイダ（OpenAI GPT-4o Mini TTS、Grok TTS）では速度スライダーが無効化されます。
 
 ## プライバシーに関する考慮事項
 

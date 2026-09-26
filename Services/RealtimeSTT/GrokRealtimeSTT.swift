@@ -30,6 +30,9 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
 
     private var audioEngine: AVAudioEngine?
     private var webSocketTask: URLSessionWebSocketTask?
+    private var finishingWebSocketTask: URLSessionWebSocketTask?
+    private var connectionGeneration = UUID()
+    private var finalizationTask: Task<Void, Never>?
     private var urlSession: URLSession?
 
     private let apiKeyManager = APIKeyManager.shared
@@ -76,6 +79,11 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 3
 
+    // Session generation token. Incremented on each startListening so the
+    // deferred-close Task from a stopped session can detect that a new session
+    // has started and avoid touching (or emitting from) the new session's state.
+    private var sessionGeneration = 0
+
     func startListening() async throws {
         guard let apiKey = apiKeyManager.getAPIKey(for: .grok) else {
             throw RealtimeSTTError.apiError("Grok API key not found")
@@ -86,6 +94,10 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Stop any existing session
         stopListening()
+        finishingWebSocketTask = nil
+
+        // Invalidate any deferred-close Task still running for the old session
+        sessionGeneration += 1
 
         // Reset state
         accumulatedText = ""
@@ -138,6 +150,7 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
     }
 
     func stopListening() {
+        connectionGeneration = UUID()
         isIntentionallyStopping = true
 
         // Stop audio engine immediately so we don't keep streaming after user stops
@@ -158,6 +171,7 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         // to nil now lets a subsequent startListening create a fresh session without
         // waiting for the old one to finish closing.
         let task = webSocketTask
+        finishingWebSocketTask = task
         let session = urlSession
         webSocketTask = nil
         urlSession = nil
@@ -176,14 +190,18 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
             // The final result is emitted after the wait so it includes the
             // server-authoritative full transcript when transcript.done arrives.
             transcriptDoneReceived = false
-            Task { @MainActor [weak self] in
+            let generation = sessionGeneration
+            finalizationTask = Task { @MainActor [weak self] in
                 if let jsonData = try? JSONSerialization.data(withJSONObject: ["type": "audio.done"]),
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     try? await task.send(.string(jsonString))
                 }
 
+                // Bail out of the wait early if a new session has started;
+                // transcriptDoneReceived would then belong to the new session.
                 let deadline = Date().addingTimeInterval(1.5)
                 while let self = self,
+                      self.sessionGeneration == generation,
                       !self.transcriptDoneReceived,
                       Date() < deadline {
                     try? await Task.sleep(nanoseconds: 50_000_000)
@@ -192,12 +210,21 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
                 task.cancel(with: .normalClosure, reason: nil)
                 session?.invalidateAndCancel()
 
-                self?.emitFinalResult()
+                // Emit only if this close still belongs to the current session;
+                // otherwise accumulatedText was already reset by the new session.
+                if let self = self, self.sessionGeneration == generation {
+                    self.emitFinalResult()
+                }
             }
         } else {
             session?.invalidateAndCancel()
             emitFinalResult()
         }
+    }
+
+    func finishListening() async {
+        if isListening { stopListening() }
+        await finalizationTask?.value
     }
 
     /// Emit didReceiveFinalResult with the current accumulatedText (+ trailing partial).
@@ -241,7 +268,9 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         // xAI dedicated STT WebSocket. Configuration is via query string;
         // there is no separate session.update message and no way to re-configure
         // post-connect, so adaptive parameters must be computed here.
-        var components = URLComponents(string: "wss://api.x.ai/v1/stt")!
+        guard var components = URLComponents(string: "wss://api.x.ai/v1/stt") else {
+            throw RealtimeSTTError.apiError("Invalid WebSocket URL")
+        }
         // External audio (videos, etc.) tends to have continuous background sound;
         // shorten the silence window so segments finalize despite no real silence.
         let endpointingMs: Int = (audioSource == .external)
@@ -273,6 +302,7 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         urlSession = session
 
         let task = session.webSocketTask(with: request)
+        finishingWebSocketTask = nil
         webSocketTask = task
         serverReady = false
         task.resume()
@@ -303,20 +333,30 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         #endif
     }
 
+    private func acceptsMessages(from task: URLSessionWebSocketTask) -> Bool {
+        task === webSocketTask || task === finishingWebSocketTask
+    }
+
     private func startReceivingMessages() {
+        guard let task = webSocketTask else { return }
         Task { [weak self] in
-            while let self = self, let task = self.webSocketTask, task.state == .running {
+            while let self, self.acceptsMessages(from: task), task.state == .running {
                 do {
                     let message = try await task.receive()
+                    guard self.acceptsMessages(from: task) else { return }
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         dprint("GrokRealtimeSTT: WebSocket receive error: \(error)")
 
                         if self.isListening && !self.isIntentionallyStopping {
+                            let generation = self.connectionGeneration
                             Task {
+                                guard generation == self.connectionGeneration else { return }
                                 await self.handleUnexpectedDisconnection()
                             }
                         } else if self.isListening {
@@ -330,6 +370,7 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
     }
 
     private func handleUnexpectedDisconnection() async {
+        let generation = connectionGeneration
         guard !isIntentionallyStopping, reconnectAttempts < maxReconnectAttempts else {
             if isListening {
                 if !accumulatedText.isEmpty {
@@ -353,20 +394,23 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         serverReady = false
 
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        guard isListening, !isIntentionallyStopping else { return }
+        guard generation == connectionGeneration, isListening, !isIntentionallyStopping else { return }
 
         do {
             guard let apiKey = apiKeyManager.getAPIKey(for: .grok) else {
                 throw RealtimeSTTError.apiError("API key not available")
             }
             try await connectWebSocket(apiKey: apiKey)
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             reconnectAttempts = 0
             dprint("GrokRealtimeSTT: Reconnected successfully")
         } catch {
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             dprint("GrokRealtimeSTT: Reconnect failed: \(error)")
             await handleUnexpectedDisconnection()
         }
     }
+
 
     private func handleWebSocketMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
@@ -483,24 +527,105 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
             audioConverter = AVAudioConverter(from: inputFormat, to: outFormat)
         }
 
+        // Capture converter and format for use in tap closure
+        let capturedConverter = audioConverter
+        let capturedFormat = outputFormat
+
         // Install tap to capture audio
         inputNode.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { [weak self] buffer, _ in
             guard let self = self else { return }
 
-            // Update audio level monitor
+            // Extract samples for level monitoring
+            var samples: [Float]?
             if let channelData = buffer.floatChannelData {
                 let frameLength = Int(buffer.frameLength)
-                let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
-                self.audioLevelMonitor.updateLevel(from: samples)
+                samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
             }
 
-            self.sendAudioBuffer(buffer)
+            // Process audio data with resampling (can be done on background thread)
+            let pcmData = self.convertBufferToData(buffer, converter: capturedConverter, outFormat: capturedFormat)
+
+            // Update UI and send data on main thread
+            DispatchQueue.main.async {
+                if let samples = samples {
+                    self.audioLevelMonitor.updateLevel(from: samples)
+                }
+                self.sendPCMData(pcmData)
+            }
         }
 
         audioEngine.prepare()
         try audioEngine.start()
     }
 
+    /// Convert buffer to PCM data with optional resampling
+    /// Parameters are passed to allow calling from background thread
+    nonisolated private func convertBufferToData(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter?, outFormat: AVAudioFormat?) -> Data {
+        // Need to resample if converter is provided
+        guard let converter = converter, let outFormat = outFormat else {
+            // No converter needed - just convert format
+            if buffer.format.commonFormat == .pcmFormatInt16 {
+                return bufferToData(buffer)
+            } else {
+                return convertFloatBufferToInt16Data(buffer)
+            }
+        }
+
+        let ratio = outFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: outputFrameCapacity) else {
+            return Data()
+        }
+
+        var error: NSError?
+        let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        if status == .error || error != nil {
+            return Data()
+        }
+
+        return bufferToData(outputBuffer)
+    }
+
+    /// Send PCM data - must be called from main thread
+    private func sendPCMData(_ pcmData: Data) {
+        guard isListening, !pcmData.isEmpty else { return }
+
+        // Skip audio during settling time to avoid initial noise being transcribed
+        // Applies to both microphone and external sources (system/app audio)
+        if let startTime = audioStartTime,
+           Date().timeIntervalSince(startTime) < micSettlingTime {
+            return
+        }
+
+        // Check if we should pre-buffer or send directly
+        preBufferLock.lock()
+        let shouldPreBuffer = isPreBuffering
+        preBufferLock.unlock()
+
+        if shouldPreBuffer {
+            preBufferLock.lock()
+            // Limit pre-buffer size to prevent memory issues during slow connections
+            let currentSize = preBuffer.reduce(0) { $0 + $1.count }
+            if currentSize + pcmData.count > maxPreBufferSize {
+                // Remove oldest data to make room (keep most recent audio)
+                var sizeToRemove = currentSize + pcmData.count - maxPreBufferSize
+                while sizeToRemove > 0 && !preBuffer.isEmpty {
+                    sizeToRemove -= preBuffer.removeFirst().count
+                }
+            }
+            preBuffer.append(pcmData)
+            preBufferLock.unlock()
+        } else {
+            sendAudioData(pcmData)
+        }
+    }
+
+    /// For external audio source - called from main thread
     private func sendAudioBuffer(_ buffer: AVAudioPCMBuffer) {
         guard isListening else { return }
 
@@ -595,13 +720,13 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         }
     }
 
-    private func bufferToData(_ buffer: AVAudioPCMBuffer) -> Data {
+    nonisolated private func bufferToData(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let int16Data = buffer.int16ChannelData else { return Data() }
         let frameLength = Int(buffer.frameLength)
         return Data(bytes: int16Data[0], count: frameLength * 2)
     }
 
-    private func convertFloatBufferToInt16Data(_ buffer: AVAudioPCMBuffer) -> Data {
+    nonisolated private func convertFloatBufferToInt16Data(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let floatData = buffer.floatChannelData else { return Data() }
         let frameLength = Int(buffer.frameLength)
 

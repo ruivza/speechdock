@@ -13,6 +13,7 @@ final class StatusBarManager: NSObject {
     private var cancellables = Set<AnyCancellable>()
     private var observationTask: Task<Void, Never>?
     private var animationTask: Task<Void, Never>?
+    private var appearanceObservation: NSKeyValueObservation?
     private weak var appState: AppState?
 
     /// Whether the menu bar panel is currently visible
@@ -52,7 +53,18 @@ final class StatusBarManager: NSObject {
         // Create panel
         createPanel(appState: appState)
 
-        // Observe state changes using a periodic check
+        // Re-tint the idle icon when the menu bar appearance changes
+        // (the idle-state tint depends on effectiveAppearance in debug builds)
+        appearanceObservation = statusItem?.button?.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, let appState = self.appState else { return }
+                if self.getCurrentIconState(for: appState) == 0 {
+                    self.updateIcon(for: appState, animated: false)
+                }
+            }
+        }
+
+        // Observe state changes (observation-based, no polling)
         startObservingState(appState: appState)
     }
 
@@ -89,23 +101,15 @@ final class StatusBarManager: NSObject {
 
     private func startObservingState(appState: AppState) {
         observationTask?.cancel()
-        observationTask = Task { [weak self] in
-            var lastState = self?.getCurrentIconState(for: appState)
-            var lastAppearanceName: NSAppearance.Name?
+        observationTask = Task { [weak self, weak appState] in
+            var lastState: Int?
 
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-
-                guard let self = self else { break }
+                guard let self = self, let appState = appState else { break }
 
                 let newState = self.getCurrentIconState(for: appState)
 
-                // Check for appearance change (light/dark mode) to update debug badge color
-                let currentAppearanceName = self.statusItem?.button?.effectiveAppearance.name
-                let appearanceChanged = currentAppearanceName != lastAppearanceName
-                lastAppearanceName = currentAppearanceName
-
-                if newState != lastState || (appearanceChanged && newState == 0) {
+                if newState != lastState {
                     lastState = newState
 
                     // Start or stop animation based on state
@@ -119,6 +123,17 @@ final class StatusBarManager: NSObject {
                         self.updateIcon(for: appState, animated: false)
                     }
                 }
+
+                // Park until one of the AppState properties used by
+                // getCurrentIconState changes (AppState is @Observable),
+                // or until the task is cancelled
+                let parking = ObservationParking()
+                withObservationTracking {
+                    _ = self.getCurrentIconState(for: appState)
+                } onChange: {
+                    parking.resume()
+                }
+                await parking.park()
             }
         }
     }
@@ -361,6 +376,47 @@ final class StatusBarManager: NSObject {
                     NSEvent.removeMonitor(monitor)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Observation Parking
+
+/// A one-shot parking spot used to suspend a task until an observation fires.
+/// Resuming is idempotent, so it is safe to resume from both an observation
+/// change and a task cancellation handler (whichever comes first wins).
+private final class ObservationParking: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var didResume = false
+
+    func resume() {
+        lock.lock()
+        didResume = true
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume()
+    }
+
+    func park() async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                lock.lock()
+                if didResume {
+                    lock.unlock()
+                    continuation.resume()
+                    return
+                }
+                self.continuation = continuation
+                let alreadyCancelled = Task.isCancelled
+                lock.unlock()
+                if alreadyCancelled {
+                    resume()
+                }
+            }
+        } onCancel: {
+            resume()
         }
     }
 }

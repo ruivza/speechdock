@@ -295,17 +295,14 @@ final class FloatingWindowManager: ObservableObject {
     private func createWindow(style: PanelStyle, title: String, size: NSSize) -> KeyableWindow {
         let styleMask: NSWindow.StyleMask
         let level: NSWindow.Level
-        let movableByBackground: Bool
 
         switch style {
         case .floating:
             styleMask = [.borderless, .resizable]
             level = WindowLevelCoordinator.shared.nextPanelLevel()
-            movableByBackground = true
         case .standardWindow:
             styleMask = [.titled, .closable, .miniaturizable, .resizable]
             level = .normal
-            movableByBackground = false
         }
 
         let window = KeyableWindow(
@@ -318,7 +315,7 @@ final class FloatingWindowManager: ObservableObject {
         window.level = level
         window.isReleasedWhenClosed = false
         window.hasShadow = true
-        window.isMovableByWindowBackground = movableByBackground
+        window.isMovableByWindowBackground = false // Floating views have an explicit drag handle.
         window.title = title  // Visible in standard window mode
         window.minSize = Self.windowMinSize
         window.maxSize = Self.windowMaxSize
@@ -697,8 +694,14 @@ final class FloatingWindowManager: ObservableObject {
         self.clipboardOnly = false
 
         // Return to accessory mode if no other windows are open
+        // Match the identifier WindowManager actually assigns ("settings", see
+        // WindowManager.openSettingsWindow). The previous check looked for a
+        // title of "Settings" and an "about" identifier, neither of which exist —
+        // the window is titled "SpeechDock Settings" and About is a category
+        // within the same settings window — so this was always false and the
+        // Dock icon disappeared whenever a panel closed over an open Settings.
         let hasOtherWindows = NSApp.windows.contains {
-            ($0.title == "Settings" || $0.identifier?.rawValue == "about") && $0.isVisible
+            $0.identifier?.rawValue == "settings" && $0.isVisible
         }
         if !hasOtherWindows {
             NSApp.setActivationPolicy(.accessory)

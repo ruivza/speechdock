@@ -30,7 +30,7 @@ lang: ja
 
 **Macのあらゆる音声をテキストに** — マイクからの声、システム全体の音声、特定アプリの音声。Macが聞ける音なら、SpeechDockがリアルタイムで文字起こしします。
 
-メニューバーに常駐し、グローバルホットキーでどこからでもアクセス可能。インストール後すぐに使え、APIキーや追加ダウンロードは不要です。
+メニューバーに常駐し、グローバルホットキーでどこからでもアクセス可能。インストール後すぐに使え、APIキーは不要です。初回は言語モデルのダウンロードが必要になる場合があります。
 
 ---
 
@@ -62,8 +62,8 @@ lang: ja
 - **TTS連携** — 翻訳テキストを自動的に読み上げ
 
 ### クラウドプロバイダ（オプション）
-- **OpenAI** — GPT-4o Transcribe（STT）、GPT-4o Mini TTS / TTS-1（TTS）
-- **Google Gemini** — Gemini 2.5 Flash（STT）、Gemini 3.1 Flash TTS（TTS）
+- **OpenAI** — GPT Realtime Whisper / GPT-4o Mini Transcribe（STT）、GPT-4o Mini TTS (Dec 2025)（TTS）
+- **Google Gemini** — Gemini 2.5 Flash（STT）、Gemini 3.8 Flash / Flash-Lite TTS（TTS）
 - **ElevenLabs** — Scribe v2（STT）、Eleven v3（TTS）
 - **Grok (xAI)** — Grok STT（STT）、Grok TTS（TTS）
 

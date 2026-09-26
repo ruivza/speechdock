@@ -41,7 +41,8 @@ enum ScreenCaptureService {
         }
 
         // Convert from bottom-left origin (AppKit) to top-left origin (CGImage)
-        let screenHeight = NSScreen.screens.map { $0.frame.maxY }.max() ?? 0
+        // Quartz uses the primary screen's height as the reference for the flip
+        let screenHeight = NSScreen.screens.first?.frame.height ?? 0
         let flippedRect = CGRect(
             x: rect.origin.x,
             y: screenHeight - rect.origin.y - rect.height,
@@ -74,7 +75,8 @@ enum ScreenCaptureService {
         }
 
         // Get screen height for coordinate conversion
-        let screenHeight = NSScreen.screens.map { $0.frame.maxY }.max() ?? 0
+        // Quartz uses the primary screen's height as the reference for the flip
+        let screenHeight = NSScreen.screens.first?.frame.height ?? 0
 
         // Convert from bottom-left origin (AppKit) to top-left origin (CGImage)
         let flippedRect = CGRect(
@@ -91,47 +93,29 @@ enum ScreenCaptureService {
             return CGWindowID(windowNumber)
         }
 
-        // Get all on-screen windows
-        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
-            throw CaptureError.captureFailed
-        }
-
-        // Filter out excluded windows and get remaining window IDs
-        let windowIDs = windowList.compactMap { info -> CGWindowID? in
-            guard let windowID = info[kCGWindowNumber as String] as? CGWindowID else {
-                return nil
-            }
-            if excludeWindowIDs.contains(windowID) {
-                return nil
-            }
-            return windowID
-        }
-
-        // If we have windows to capture
-        if !windowIDs.isEmpty {
-            // Create image from specific windows (excluding our overlay)
-            // We need to capture below a certain window level
-            guard let image = CGWindowListCreateImage(
-                flippedRect,
-                .optionOnScreenBelowWindow,
-                excludeWindowIDs.first ?? kCGNullWindowID,
-                [.boundsIgnoreFraming, .nominalResolution]
-            ) else {
-                // Fallback to capturing all on-screen content
-                guard let fallbackImage = CGWindowListCreateImage(
-                    flippedRect,
-                    .optionOnScreenOnly,
-                    kCGNullWindowID,
-                    [.boundsIgnoreFraming, .nominalResolution]
-                ) else {
-                    throw CaptureError.captureFailed
-                }
-                return fallbackImage
-            }
+        // Capture below the first excluded window so overlay windows are not
+        // included. Fall back to a plain on-screen capture if that fails or if
+        // there are no windows to exclude.
+        if let belowWindowID = excludeWindowIDs.first,
+           let image = CGWindowListCreateImage(
+               flippedRect,
+               .optionOnScreenBelowWindow,
+               belowWindowID,
+               [.boundsIgnoreFraming, .nominalResolution]
+           ) {
             return image
         }
 
-        throw CaptureError.captureFailed
+        // Fallback to capturing all on-screen content
+        guard let fallbackImage = CGWindowListCreateImage(
+            flippedRect,
+            .optionOnScreenOnly,
+            kCGNullWindowID,
+            [.boundsIgnoreFraming, .nominalResolution]
+        ) else {
+            throw CaptureError.captureFailed
+        }
+        return fallbackImage
     }
 
     /// Capture the entire screen (all displays combined)
@@ -151,19 +135,10 @@ enum ScreenCaptureService {
 
     /// Check if screen recording permission is granted
     static var hasScreenRecordingPermission: Bool {
-        // Attempt to capture a small region to check permission
-        // This is a common technique to check screen recording permission
-        let testRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-        if let image = CGWindowListCreateImage(
-            testRect,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            .nominalResolution
-        ) {
-            // If we got an image with actual content, we have permission
-            return image.width > 0 && image.height > 0
-        }
-        return false
+        // CGWindowListCreateImage returns an image even without permission
+        // (showing only our own windows), so use the preflight API like
+        // PermissionService does.
+        CGPreflightScreenCaptureAccess()
     }
 
     /// Request screen recording permission by triggering a capture

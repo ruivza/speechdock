@@ -23,6 +23,8 @@ protocol RealtimeSTTService: AnyObject {
 
     func startListening() async throws
     func stopListening()
+    /// Stop input and await trailing recognition results before returning.
+    func finishListening() async
     func availableModels() -> [RealtimeSTTModelInfo]
 
     /// Process audio buffer from external source (system audio, app audio)
@@ -48,6 +50,8 @@ struct RealtimeSTTModelInfo: Identifiable, Hashable {
 // MARK: - Default Model ID
 
 extension RealtimeSTTService {
+    func finishListening() async { stopListening() }
+
     /// Returns the default model ID from availableModels() (single source of truth)
     var defaultModelId: String {
         availableModels().first(where: { $0.isDefault })?.id

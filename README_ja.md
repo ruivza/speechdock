@@ -60,12 +60,14 @@
 | プロバイダ | モデル | APIキー |
 |----------|--------|---------|
 | **macOS Native** | System Default | 不要 |
-| **OpenAI** | GPT-4o Mini TTS (Dec 2025), GPT-4o Mini TTS, TTS-1, TTS-1 HD | 必要 |
-| **Google Gemini** | Gemini 3.1 Flash TTS (Preview) — 表現豊か、多言語対応 | 必要 |
-| **ElevenLabs** | Eleven v3, Flash v2.5, Multilingual v2, Turbo v2.5, Monolingual v1 | 必要 |
-| **Grok** | Grok TTS — 5音声、20以上の言語対応 | 必要 |
+| **OpenAI** | GPT-4o Mini TTS (Dec 2025) | 必要 |
+| **Google Gemini** | Gemini 3.8 Flash TTS（既定）, Gemini 3.8 Flash-Lite TTS — 表現豊か、多言語対応 | 必要 |
+| **ElevenLabs** | Eleven v3, Flash v2.5 | 必要 |
+| **Grok** | Grok TTS — 26音声、25以上の言語対応 | 必要 |
 
-**音声タグ**: Gemini 3.1、Grok TTS、ElevenLabs v3 は `[whispers]`、`[laughs]`、`[excited]` などのインラインタグや、Grokの `<whisper>...</whisper>`、`<slow>...</slow>` などのラップタグをサポートしています。タグはTTSパネルのテキストに直接記述できます。空のパネルに表示される "Reference" リンクから各プロバイダの公式タグ一覧にアクセスできます。
+Gemini TTS の再生速度は0.5〜2.0倍に調整できます。保存音声は元の速度を保ちます。
+
+**音声タグ**: Gemini 3.8、Grok TTS、ElevenLabs v3 は `[whispers]`、`[laughs]`、`[excited]` などのインラインタグや、Grokの `<whisper>...</whisper>`、`<slow>...</slow>` などのラップタグをサポートしています。タグはTTSパネルのテキストに直接記述できます。空のパネルに表示される "Reference" リンクから各プロバイダの公式タグ一覧にアクセスできます。
 
 ### OCR読み上げ
 
@@ -85,7 +87,7 @@ macOS Vision Frameworkを使用してテキスト認識を行います。画面�
 - **画面上の字幕** - 画面上の任意の場所にフローティング字幕として文字起こしを表示
 - **リアルタイム翻訳** - 話しながら字幕を翻訳（オプション）
 - **カスタマイズ可能な外観** - フォントサイズ、透明度、位置（上/下）、最大行数を調整可能
-- **ドラッグ可能な位置** - 字幕を画面上の任意の位置にドラッグ可能
+- **ドラッグ可能な位置** - 上端のつまみをドラッグして字幕を画面上の任意の位置に移動
 - **パネル自動非表示** - 字幕モード有効時にSTTパネルを自動的に非表示にするオプション
 
 ホットキー（デフォルト: `Ctrl + Option + S`）またはSTTパネル/メニューバーから切り替えます。
@@ -250,8 +252,8 @@ SpeechDockには以下の権限が必要または推奨されます：
 
 **設定** > **外観** で2つのパネルスタイルから選択できます：
 
-- **Floating**: 最前面固定のボーダーレスパネル。背景のどこでもドラッグ可能
-- **Standard Window**: タイトルバー付きの通常のmacOSウィンドウ。最小化可能
+- **Floating**: 最前面固定のボーダーレスパネル。上端のつまみをドラッグして移動
+- **Standard Window**: 通常のmacOSウィンドウ。タイトルバーをドラッグして移動でき、最小化も可能
 
 注: STTパネルとTTSパネルは同時に開けません。一方を開くともう一方は自動的に閉じます。
 

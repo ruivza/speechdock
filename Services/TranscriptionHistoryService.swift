@@ -18,12 +18,17 @@ struct TranscriptionHistoryEntry: Codable, Identifiable {
         return String(cleaned.prefix(40)) + "..."
     }
 
-    /// Formatted date string for display
-    var formattedDate: String {
+    /// Shared formatter for `formattedDate` (DateFormatter creation is expensive)
+    private static let sharedDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    /// Formatted date string for display
+    var formattedDate: String {
+        Self.sharedDateFormatter.string(from: date)
     }
 }
 

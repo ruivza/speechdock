@@ -11,13 +11,14 @@ final class OpenAISTTClient: STTAPIClient {
     func transcribe(
         audioData: Data,
         model: STTModel,
-        language: String?
+        language: String?,
+        originalExtension: String? = nil
     ) async throws -> TranscriptionResult {
         guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
             throw STTError.invalidAPIKey
         }
 
-        let format = AudioFormatConverter.normalizeFormat(audioData)
+        let format = AudioFormatConverter.normalizeFormat(audioData, originalExtension: originalExtension)
         let boundary = UUID().uuidString
         var body = Data()
 
@@ -65,16 +66,8 @@ final class OpenAISTTClient: STTAPIClient {
         request.httpBody = body
         request.timeoutInterval = 180
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await STTAPIHelper.performRequest(request, providerName: "OpenAI")
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw STTError.networkError(URLError(.badServerResponse))
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw STTError.apiError("OpenAI API Error (\(httpResponse.statusCode)): \(errorBody)")
-        }
 
         let json = try JSONDecoder().decode(OpenAITranscriptionResponse.self, from: data)
 
@@ -121,5 +114,64 @@ private extension Data {
         if let data = string.data(using: .utf8) {
             append(data)
         }
+    }
+}
+
+// MARK: - API Retry Helper
+
+/// Helper for STT API requests with retry logic for transient errors (429, 5xx)
+enum STTAPIHelper {
+    private static let retryableStatusCodes: Set<Int> = [429, 500, 502, 503, 504]
+    private static let maxRetries = 3
+
+    /// Returns a successful HTTP 200 response, or throws after retrying transient errors.
+    static func performRequest(_ request: URLRequest, providerName: String) async throws -> (Data, HTTPURLResponse) {
+        var lastError: Error?
+
+        for attempt in 0..<maxRetries {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw STTError.networkError(URLError(.badServerResponse))
+                }
+
+                if httpResponse.statusCode == 200 {
+                    return (data, httpResponse)
+                }
+
+                if retryableStatusCodes.contains(httpResponse.statusCode) {
+                    if attempt < maxRetries - 1 {
+                        let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                        try await Task.sleep(nanoseconds: delay)
+                        dprint("\(providerName) STT: Retry \(attempt + 1)/\(maxRetries) after HTTP \(httpResponse.statusCode)")
+
+                        continue
+                    }
+                }
+
+                let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+                throw STTError.apiError("\(providerName) API Error (\(httpResponse.statusCode)): \(errorMessage)")
+
+            } catch let error as STTError {
+                throw error
+            } catch {
+                lastError = error
+
+                if attempt < maxRetries - 1 {
+                    let delay = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+                    try await Task.sleep(nanoseconds: delay)
+                    dprint("\(providerName) STT: Retry \(attempt + 1)/\(maxRetries) after error: \(error.localizedDescription)")
+
+                    continue
+                }
+            }
+        }
+
+        if let error = lastError {
+            throw STTError.networkError(error)
+        }
+
+        throw STTError.networkError(URLError(.unknown))
     }
 }

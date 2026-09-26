@@ -29,6 +29,9 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
 
     private var audioEngine: AVAudioEngine?
     private var webSocketTask: URLSessionWebSocketTask?
+    private var finishingWebSocketTask: URLSessionWebSocketTask?
+    private var connectionGeneration = UUID()
+    private var finalizationTask: Task<Void, Never>?
     private var urlSession: URLSession?
 
     private let apiKeyManager = APIKeyManager.shared
@@ -83,6 +86,11 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
     private var isIntentionallyStopping = false
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 3
+    private var reconnectTask: Task<Void, Never>?
+
+    // Session generation token, reissued on each startListening so deferred
+    // tasks from a previous session don't touch the new session's state
+    private var sessionGeneration = UUID()
 
     func startListening() async throws {
         guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
@@ -91,6 +99,11 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Stop any existing session
         stopListening()
+        finishingWebSocketTask = nil
+
+        // Start a new session generation so deferred tasks from the previous
+        // session stop touching shared state
+        sessionGeneration = UUID()
 
         // Reset reconnect state
         isIntentionallyStopping = false
@@ -138,21 +151,34 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         delegate?.realtimeSTT(self, didChangeListeningState: true)
 
         // Connect WebSocket (audio is being pre-buffered meanwhile)
-        try await connectWebSocket(apiKey: apiKey)
+        do {
+            try await connectWebSocket(apiKey: apiKey)
 
-        // Brief calibration period to measure noise floor (audio is being captured)
-        // This allows adaptive VAD parameters based on background noise
-        try await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
+            // Brief calibration period to measure noise floor (audio is being captured)
+            // This allows adaptive VAD parameters based on background noise
+            try await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
 
-        // Configure the transcription session with adaptive VAD parameters
-        try await configureSession()
+            // Configure the transcription session with adaptive VAD parameters
+            try await configureSession()
 
-        // Flush pre-buffered audio
-        await flushPreBuffer()
+            // Flush pre-buffered audio
+            await flushPreBuffer()
+        } catch {
+            // Clean up on failure so no reconnect task survives a thrown startListening
+            dprint("OpenAIRealtimeSTT: startListening failed: \(error)")
+
+            stopListening()
+            throw error
+        }
     }
 
     func stopListening() {
+        connectionGeneration = UUID()
         isIntentionallyStopping = true
+
+        // Cancel any pending reconnect so it can't revive a stopped session
+        reconnectTask?.cancel()
+        reconnectTask = nil
 
         // Stop audio engine immediately so we don't keep streaming after user stops
         audioEngine?.stop()
@@ -170,6 +196,7 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Capture WebSocket for the deferred close so subsequent state changes don't race.
         let task = webSocketTask
+        finishingWebSocketTask = task
         let session = urlSession
         let needsFinalCommit = hasUnfinalizedAudio && !commitInFlight
         // If we'll send a final commit, mark so the wait loop knows to expect a
@@ -191,7 +218,16 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         if wasListening, let task = task, task.state == .running {
             // Send a final commit so the server emits one last `.completed` with the
             // trailing utterance, then close after ~1.5s to capture it.
-            Task { @MainActor [weak self] in
+            // The generation token guards against a new session starting meanwhile:
+            // shared state (commitInFlight, accumulatedText) belongs to the new
+            // session then, so this deferred close must not read or mutate it.
+            let generation = sessionGeneration
+            finalizationTask = Task { @MainActor [weak self] in
+                guard let self = self, self.sessionGeneration == generation else {
+                    task.cancel(with: .normalClosure, reason: nil)
+                    session?.invalidateAndCancel()
+                    return
+                }
                 if needsFinalCommit {
                     if let jsonData = try? JSONSerialization.data(withJSONObject: ["type": "input_audio_buffer.commit"]),
                        let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -199,19 +235,26 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
                     }
                 }
                 let deadline = Date().addingTimeInterval(1.5)
-                while let self = self,
+                while self.sessionGeneration == generation,
                       self.commitInFlight,
                       Date() < deadline {
                     try? await Task.sleep(nanoseconds: 50_000_000)
                 }
                 task.cancel(with: .normalClosure, reason: nil)
                 session?.invalidateAndCancel()
-                self?.emitFinalResult()
+                if self.sessionGeneration == generation {
+                    self.emitFinalResult()
+                }
             }
         } else {
             session?.invalidateAndCancel()
             emitFinalResult()
         }
+    }
+
+    func finishListening() async {
+        if isListening { stopListening() }
+        await finalizationTask?.value
     }
 
     /// Emit didReceiveFinalResult with the current accumulatedText (+ trailing partial).
@@ -273,6 +316,7 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         urlSession = session
 
         let task = session.webSocketTask(with: request)
+        finishingWebSocketTask = nil
         webSocketTask = task
         sessionCreated = false
         task.resume()
@@ -365,20 +409,30 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         try await webSocketTask?.send(.string(jsonString))
     }
 
+    private func acceptsMessages(from task: URLSessionWebSocketTask) -> Bool {
+        task === webSocketTask || task === finishingWebSocketTask
+    }
+
     private func startReceivingMessages() {
+        guard let task = webSocketTask else { return }
         Task { [weak self] in
-            while let self = self, let task = self.webSocketTask, task.state == .running {
+            while let self, self.acceptsMessages(from: task), task.state == .running {
                 do {
                     let message = try await task.receive()
+                    guard self.acceptsMessages(from: task) else { return }
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
                     await MainActor.run {
+                        guard self.acceptsMessages(from: task) else { return }
                         dprint("OpenAIRealtimeSTT: WebSocket receive error: \(error)")
 
                         if self.isListening && !self.isIntentionallyStopping {
-                            Task {
+                            let generation = self.connectionGeneration
+                            self.reconnectTask = Task {
+                                guard generation == self.connectionGeneration else { return }
                                 await self.handleUnexpectedDisconnection()
                             }
                         } else if self.isListening {
@@ -392,15 +446,16 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
     }
 
     private func handleUnexpectedDisconnection() async {
-        guard !isIntentionallyStopping, reconnectAttempts < maxReconnectAttempts else {
-            if isListening {
-                // Send accumulated text before reporting error so it's not lost
-                if !accumulatedText.isEmpty {
-                    delegate?.realtimeSTT(self, didReceivePartialResult: accumulatedText)
-                }
-                let error = RealtimeSTTError.connectionError("Connection lost after \(maxReconnectAttempts) reconnect attempts")
-                delegate?.realtimeSTT(self, didFailWithError: error)
+        let generation = connectionGeneration
+        // Only fire while actively listening on an unintended disconnection
+        guard generation == connectionGeneration, isListening, !isIntentionallyStopping else { return }
+        guard reconnectAttempts < maxReconnectAttempts else {
+            // Send accumulated text before reporting error so it's not lost
+            if !accumulatedText.isEmpty {
+                delegate?.realtimeSTT(self, didReceivePartialResult: accumulatedText)
             }
+            let error = RealtimeSTTError.connectionError("Connection lost after \(maxReconnectAttempts) reconnect attempts")
+            delegate?.realtimeSTT(self, didFailWithError: error)
             return
         }
         reconnectAttempts += 1
@@ -418,23 +473,26 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         sessionCreated = false
 
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        guard isListening, !isIntentionallyStopping else { return }
+        guard generation == connectionGeneration, isListening, !isIntentionallyStopping, !Task.isCancelled else { return }
 
         do {
             guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
                 throw RealtimeSTTError.apiError("API key not available")
             }
             try await connectWebSocket(apiKey: apiKey)
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             try await configureSession()
             reconnectAttempts = 0  // Reset on successful reconnect
             dprint("OpenAIRealtimeSTT: Reconnected successfully")
 
         } catch {
+            guard generation == connectionGeneration, !Task.isCancelled else { return }
             dprint("OpenAIRealtimeSTT: Reconnect failed: \(error)")
 
             await handleUnexpectedDisconnection()
         }
     }
+
 
     private func handleWebSocketMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
@@ -582,65 +640,88 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
             audioConverter = AVAudioConverter(from: inputFormat, to: outFormat)
         }
 
+        // Capture converter and format for use in tap closure. The tap runs on a
+        // realtime audio render thread, so it must not touch MainActor state.
+        let capturedConverter = audioConverter
+        let capturedFormat = outputFormat
+
         // Install tap to capture audio
         inputNode.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { [weak self] buffer, _ in
             guard let self = self else { return }
 
-            // Update audio level monitor
+            // Extract samples for level monitoring
+            var samples: [Float]?
             if let channelData = buffer.floatChannelData {
                 let frameLength = Int(buffer.frameLength)
-                let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
-                self.audioLevelMonitor.updateLevel(from: samples)
+                samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
             }
 
-            self.sendAudioBuffer(buffer)
+            // Convert PCM on the render thread (nonisolated, no shared state)
+            let pcmData = self.convertBufferToData(buffer, converter: capturedConverter, outFormat: capturedFormat)
+
+            // Everything that touches state (level monitor, isListening, settling
+            // skip, preBuffer, sendAudioData, updateClientVAD) hops to main
+            DispatchQueue.main.async {
+                if let samples = samples {
+                    self.audioLevelMonitor.updateLevel(from: samples)
+                }
+                self.sendPCMData(pcmData)
+            }
         }
 
         audioEngine.prepare()
         try audioEngine.start()
     }
 
+    /// Convert buffer to PCM data with optional resampling.
+    /// Parameters are passed explicitly so this can run on the audio render thread.
+    nonisolated private func convertBufferToData(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter?, outFormat: AVAudioFormat?) -> Data {
+        // Need to resample if converter is provided
+        guard let converter = converter, let outFormat = outFormat else {
+            // No converter needed - just convert format
+            if buffer.format.commonFormat == .pcmFormatInt16 {
+                return bufferToData(buffer)
+            } else {
+                return convertFloatBufferToInt16Data(buffer)
+            }
+        }
+
+        let ratio = outFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: outputFrameCapacity) else {
+            return Data()
+        }
+
+        var error: NSError?
+        let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        if status == .error || error != nil {
+            return Data()
+        }
+
+        return bufferToData(outputBuffer)
+    }
+
+    /// Convert then dispatch an externally captured buffer (called on main thread)
     private func sendAudioBuffer(_ buffer: AVAudioPCMBuffer) {
         guard isListening else { return }
+
+        let pcmData = convertBufferToData(buffer, converter: audioConverter, outFormat: outputFormat)
+        sendPCMData(pcmData)
+    }
+
+    /// Handle converted PCM data - must be called on the main thread
+    private func sendPCMData(_ pcmData: Data) {
+        guard isListening, !pcmData.isEmpty else { return }
 
         // Skip audio during settling time to avoid initial noise being transcribed
         // Applies to both microphone and external sources (system/app audio)
         if let startTime = audioStartTime,
            Date().timeIntervalSince(startTime) < micSettlingTime {
-            return
-        }
-
-        let pcmData: Data
-
-        if let converter = audioConverter, let outFormat = outputFormat {
-            // Need to convert format
-            let ratio = outFormat.sampleRate / buffer.format.sampleRate
-            let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-
-            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: outputFrameCapacity) else {
-                return
-            }
-
-            var error: NSError?
-            let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-
-            if status == .error || error != nil {
-                return
-            }
-
-            pcmData = bufferToData(outputBuffer)
-        } else if buffer.format.commonFormat == .pcmFormatInt16 {
-            // Already in correct format
-            pcmData = bufferToData(buffer)
-        } else {
-            // Convert float to int16
-            pcmData = convertFloatBufferToInt16Data(buffer)
-        }
-
-        if pcmData.isEmpty {
             return
         }
 
@@ -801,13 +882,13 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         }
     }
 
-    private func bufferToData(_ buffer: AVAudioPCMBuffer) -> Data {
+    nonisolated private func bufferToData(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let int16Data = buffer.int16ChannelData else { return Data() }
         let frameLength = Int(buffer.frameLength)
         return Data(bytes: int16Data[0], count: frameLength * 2)
     }
 
-    private func convertFloatBufferToInt16Data(_ buffer: AVAudioPCMBuffer) -> Data {
+    nonisolated private func convertFloatBufferToInt16Data(_ buffer: AVAudioPCMBuffer) -> Data {
         guard let floatData = buffer.floatChannelData else { return Data() }
         let frameLength = Int(buffer.frameLength)
 

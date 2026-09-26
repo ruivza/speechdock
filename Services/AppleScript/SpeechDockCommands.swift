@@ -376,11 +376,8 @@ class StopQuickTranscriptionCommand: NSScriptCommand {
             }
 
             // Stop recording
-            manager.stopRecording()
-
-            // Return the transcribed text
-            let transcribedText = appState.currentTranscription
-            self.resumeExecution(withResult: transcribedText.isEmpty ? nil : transcribedText)
+            let transcribedText = await manager.stopRecordingAndWait()
+            self.resumeExecution(withResult: transcribedText)
         }
 
         return nil

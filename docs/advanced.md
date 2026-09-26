@@ -47,10 +47,12 @@ Cloud TTS provides natural-sounding voices with various styles and languages.
 
 | Provider | Models | Voices |
 |----------|--------|--------|
-| **OpenAI** | GPT-4o Mini TTS, TTS-1, TTS-1 HD | alloy, echo, fable, onyx, nova, shimmer |
-| **Google Gemini** | Gemini 3.1 Flash TTS (Preview) | 30 multilingual voices (Zephyr, Kore, Puck, etc.) |
+| **OpenAI** | GPT-4o Mini TTS (Dec 2025) | alloy, echo, fable, onyx, nova, shimmer |
+| **Google Gemini** | Gemini 3.8 Flash TTS (default), Gemini 3.8 Flash-Lite TTS | 30 multilingual voices (Zephyr, Kore, Puck, etc.) |
 | **ElevenLabs** | Eleven v3, Eleven Flash v2.5 | Large voice library |
-| **Grok** | Grok TTS | eve, ara, rex, sal, leo (20+ languages, auto-detected) |
+| **Grok** | Grok TTS | 26 voices including eve, ara, rex, sal and leo (25+ languages, auto-detected) |
+
+Gemini TTS playback speed can be adjusted from 0.5–2.0x. Saved audio retains its original pace.
 
 ### Voice Tags (Expressive Markup)
 
@@ -58,7 +60,7 @@ Some providers support inline voice tags that control delivery (laughter, whispe
 
 | Provider | Inline tags | Wrapping tags | Example |
 |----------|-------------|---------------|---------|
-| **Gemini 3.1 Flash TTS** | `[whispers]`, `[excited]`, `[sighs]`, `[laughs]`, `[sarcastic]`, `[crying]`, `[tired]`, etc. | — | `Welcome! [excited] Let's go.` |
+| **Gemini 3.8 TTS** | `[whispers]`, `[excited]`, `[sighs]`, `[laughs]`, `[sarcastic]`, `[crying]`, `[tired]`, etc. | — | `Welcome! [excited] Let's go.` |
 | **Grok TTS** | `[pause]`, `[long-pause]`, `[laugh]`, `[sigh]`, `[gulp]`, `[inhale]`, `[exhale]` | `<soft>`, `<loud>`, `<slow>`, `<fast>`, `<whisper>`, `<sing>` | `I have <whisper>a secret</whisper>.` |
 | **ElevenLabs v3** | `[laughs]`, `[sighs]`, `[whispers]`, `[excited]`, `[tired]`, etc. | — | `That was hilarious! [laughs]` |
 
@@ -85,12 +87,12 @@ Transcribe pre-recorded audio files. Available with cloud STT providers and macO
 
 | Provider | Formats | Max Size | Max Duration | API |
 |----------|---------|----------|--------------|-----|
-| **macOS** (26+) | MP3, WAV, M4A, AAC, AIFF, FLAC, MP4 | 500 MB | No limit | SpeechAnalyzer (offline) |
+| **macOS** (26+) | MP3, WAV, M4A, AAC, AIFF, FLAC, MP4 | 100 MB | No limit | SpeechAnalyzer; system recognition fallback |
 | **OpenAI** | MP3, WAV, M4A, FLAC, WebM, MP4 | 25 MB | Unlimited | Whisper |
 | **Gemini** | MP3, WAV, AAC, OGG, FLAC | 20 MB | ~10 min | generateContent |
 | **ElevenLabs** | MP3, WAV, M4A, OGG, FLAC | 25 MB | ~2 hours | Scribe v2 |
 
-**Note**: macOS native file transcription requires macOS 26 or later and processes audio entirely on-device — no API key or internet connection needed.
+**Note**: macOS file transcription requires macOS 26 or later and no API key. SpeechAnalyzer processes supported languages on-device; fallback recognition may use Apple’s servers and require an internet connection.
 
 ### How to Transcribe
 
@@ -112,25 +114,18 @@ While macOS on-device translation supports ~18 languages, cloud providers offer:
 | Provider | Models | Notes |
 |----------|--------|-------|
 | **macOS** (default) | System | On-device, no API key, macOS 26+ |
-| **OpenAI** | GPT-5 Nano (default), GPT-5 Mini, GPT-5.2 | Fast, high quality |
-| **Gemini** | Gemini 3 Flash (default), Gemini 3 Pro | Fast, multilingual |
-| **Grok** | Grok 3 Fast (default), Grok 3 Mini Fast | Fast translation |
+| **OpenAI** | GPT-5.4 Mini (default), GPT-5.4 Nano | Fast, high quality |
+| **Gemini** | Gemini 3.1 Flash Lite (default), Gemini 3.1 Pro (Preview) | Fast, multilingual |
+| **Grok** | Grok 4.20 Fast (default), Grok 4.20 Fast (Reasoning) | Fast translation |
 
 ### Switching Translation Provider
 
 - **Settings** > **Translation**: Set the default provider and model
 - **Panel**: Click the `⚡` button next to the translation controls for quick switching
 
-### Provider Auto-Sync
+### Translation Provider Selection
 
-When you switch STT or TTS providers, the translation provider automatically syncs:
-
-| STT/TTS Provider | Translation Provider |
-|------------------|---------------------|
-| OpenAI | OpenAI |
-| Gemini | Gemini |
-| Grok | Grok |
-| ElevenLabs / macOS | macOS |
+The translation provider is independent of STT and TTS. Changing a speech provider does not change the translation provider. Choose it in Settings or the translation controls.
 
 ## Subtitle Real-time Translation
 
@@ -147,10 +142,10 @@ When using subtitle mode, you can enable real-time translation that translates s
 
 | Provider | Debounce | Best For |
 |----------|----------|----------|
-| **macOS** | 300ms | Fast, local, privacy-focused |
-| **OpenAI** | 800ms | High quality, many languages |
-| **Gemini** | 600ms | Good balance of speed and quality |
-| **Grok** | 800ms | Fast translation |
+| **macOS** | 200ms | Fast, local, privacy-focused |
+| **OpenAI** | 400ms | High quality, many languages |
+| **Gemini** | 350ms | Good balance of speed and quality |
+| **Grok** | 350ms | Fast translation |
 
 **Note**: Subtitle translation uses the provider's default model for optimal performance. This is independent of the model selected in the panel translation settings.
 
@@ -169,12 +164,7 @@ When using subtitle mode, you can enable real-time translation that translates s
 
 ## Language Selection
 
-Both STT and TTS support language selection with all cloud providers:
-
-- **Auto** (default): Automatically detects the spoken/target language
-- **Manual**: Choose from 25+ supported languages
-
-Available languages: English, Japanese, Chinese, Korean, Spanish, French, German, Italian, Portuguese, Russian, Arabic, Hindi, Dutch, Polish, Turkish, Indonesian, Vietnamese, Thai, Bengali, Gujarati, Kannada, Malayalam, Marathi, Tamil, Telugu.
+Cloud STT supports automatic detection or a supported language selection. Cloud TTS generally detects the language from the text; the manual TTS language picker is available for ElevenLabs.
 
 ## TTS Speed Control (Save Audio)
 
@@ -184,11 +174,11 @@ When saving audio to a file, speed is controlled differently from real-time play
 |----------|-----------|-------|-------|
 | OpenAI | — | — | GPT-4o Mini TTS has no speed parameter; speed is applied locally during playback |
 | ElevenLabs | `voice_settings.speed` | 0.7–1.2 | Mapped from app range |
-| Gemini | — | — | Gemini 3.1 Flash TTS has no speed parameter; use `[pause]` or similar tags in text for pacing effects |
+| Gemini | — | 0.5–2.0 (playback) | Gemini 3.8 TTS uses local playback rate only; saved audio retains its original pace. No pace instructions are added to the text |
 | macOS | Words per minute | 50–500 | Based on 175 wpm baseline |
 | Grok | — | — | No speed parameter; wrap text with `<slow>...</slow>` or `<fast>...</fast>` for pacing |
 
-For real-time playback, speed is controlled locally via audio processing for providers that support it, allowing dynamic adjustment during playback. Providers without an API speed parameter (OpenAI GPT-4o Mini TTS, Gemini 3.1, Grok TTS) disable the speed slider.
+For real-time playback, speed is controlled locally via audio processing for providers that support it, allowing dynamic adjustment during playback. Providers without an API speed parameter (OpenAI GPT-4o Mini TTS, Grok TTS) disable the speed slider.
 
 ## Privacy Considerations
 

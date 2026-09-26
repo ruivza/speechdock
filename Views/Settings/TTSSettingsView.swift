@@ -280,14 +280,12 @@ struct TTSSpeedSlider: View {
         switch appState.selectedTTSProvider {
         case .openAI:
             // gpt-4o-mini-tts models don't support the speed parameter.
-            return !appState.selectedTTSModel.hasPrefix("gpt-4o-mini-tts")
+            return false
         case .grok:
             // grok-tts REST API has no speed parameter.
             return false
         case .gemini:
-            // gemini-3.1-flash-tts-preview has no speed parameter (pace prompts trigger
-            // classifier rejections). Older 2.5 TTS REST models do support a pace prefix.
-            return appState.selectedTTSModel != "gemini-3.1-flash-tts-preview"
+            return true
         case .macOS, .elevenLabs:
             return true
         }
@@ -296,15 +294,9 @@ struct TTSSpeedSlider: View {
     private var speedHelpText: String? {
         switch appState.selectedTTSProvider {
         case .openAI:
-            if appState.selectedTTSModel.hasPrefix("gpt-4o-mini-tts") {
-                return "Speed control not available. Use TTS-1 or TTS-1 HD for speed control."
-            }
-            return nil
+            return "Use the playback controls to change speed. Saved audio retains the original pace."
         case .gemini:
-            if appState.selectedTTSModel == "gemini-3.1-flash-tts-preview" {
-                return "Speed control not available. Use inline tags in text (e.g. [pause]) for pacing effects."
-            }
-            return "Gemini uses natural language pace control (approximate)."
+            return "Speed changes playback only. Saved audio retains the original pace."
         case .elevenLabs:
             return "ElevenLabs has limited speed range (0.7x-1.2x mapped)."
         case .grok:
@@ -361,15 +353,9 @@ struct TTSSpeedSlider: View {
     private var speedTooltip: String {
         switch appState.selectedTTSProvider {
         case .openAI:
-            if appState.selectedTTSModel.hasPrefix("gpt-4o-mini-tts") {
-                return "GPT-4o Mini TTS does not support speed control. Select TTS-1 or TTS-1 HD."
-            }
-            return "Adjust playback speed (0.25x–4.0x)"
+            return "Change speed using the playback controls"
         case .gemini:
-            if appState.selectedTTSModel == "gemini-3.1-flash-tts-preview" {
-                return "Gemini 3.1 Flash TTS does not support speed control"
-            }
-            return "Gemini uses prompt-based pacing (approximate adjustment)"
+            return "Adjust local playback speed (0.5x–2.0x); saved audio stays at 1.0x"
         case .elevenLabs:
             return "Adjust playback speed (actual range: 0.7x–1.2x)"
         case .macOS:

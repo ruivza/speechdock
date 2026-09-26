@@ -418,19 +418,22 @@ struct TTSFloatingView: View {
     private var inlineTagHint: InlineTagHint? {
         switch appState.selectedTTSProvider {
         case .gemini:
+            guard let url = URL(string: "https://ai.google.dev/gemini-api/docs/speech-generation") else { return nil }
             return InlineTagHint(
                 description: "Expressive voice tags supported.",
-                referenceURL: URL(string: "https://ai.google.dev/gemini-api/docs/speech-generation")!
+                referenceURL: url
             )
         case .grok:
+            guard let url = URL(string: "https://docs.x.ai/developers/model-capabilities/audio/text-to-speech") else { return nil }
             return InlineTagHint(
                 description: "Expressive voice tags supported.",
-                referenceURL: URL(string: "https://docs.x.ai/developers/model-capabilities/audio/text-to-speech")!
+                referenceURL: url
             )
         case .elevenLabs where appState.selectedTTSModel == "eleven_v3":
+            guard let url = URL(string: "https://elevenlabs.io/docs/best-practices/prompting") else { return nil }
             return InlineTagHint(
                 description: "Expressive audio tags supported.",
-                referenceURL: URL(string: "https://elevenlabs.io/docs/best-practices/prompting")!
+                referenceURL: url
             )
         default:
             return nil
@@ -591,6 +594,14 @@ struct TTSFloatingView: View {
         .frame(minWidth: 820, idealWidth: 900, maxWidth: .infinity)
         .background(panelBackground)
         .cornerRadius(panelCornerRadius)
+        .overlay(alignment: .top) {
+            if isFloatingStyle {
+                WindowDragHandle()
+                    .frame(height: 12)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+            }
+        }
         .onAppear {
             dprint("TTSFloatingView: onAppear - setting editableText from ttsText, length: \(appState.ttsText.count)")
 

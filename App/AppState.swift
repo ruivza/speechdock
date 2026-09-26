@@ -120,23 +120,6 @@ final class AppState {
         }
     }
 
-    // Legacy batch STT settings (kept for compatibility)
-    var selectedProvider: STTProvider = .openAI {
-        didSet {
-            guard !isLoadingPreferences else { return }
-            if !selectedProvider.availableModels.contains(selectedModel) {
-                selectedModel = selectedProvider.defaultModel
-            }
-            savePreferences()
-        }
-    }
-    var selectedModel: STTModel = .gpt4oMiniTranscribe {
-        didSet {
-            guard !isLoadingPreferences else { return }
-            savePreferences()
-        }
-    }
-
     // MARK: - TTS State
     var ttsState: TTSState = .idle
     var ttsText = ""
@@ -165,8 +148,7 @@ final class AppState {
             }
 
             // Clear audio cache when provider changes
-            lastSynthesizedText = ""
-            ttsService = nil
+            stopTTS()
 
             savePreferences()
         }
@@ -190,7 +172,16 @@ final class AppState {
         }
     }
     var showTTSWindow = false
-    var lastSynthesizedText = ""  // Track last synthesized text for cache
+    private var ttsPlaybackTask: Task<Void, Never>?
+    private var ttsGeneration = UUID()
+    private var lastSynthesisKey: TTSAudioCacheKey?
+
+    private func synthesisKey(for text: String) -> TTSAudioCacheKey {
+        TTSAudioCacheKey(text: text, provider: selectedTTSProvider, model: selectedTTSModel,
+            voice: selectedTTSVoice, speed: selectedTTSSpeed, language: selectedTTSLanguage,
+            rules: TextReplacementService.shared.rules,
+            builtInSettings: TextReplacementService.shared.builtInSettings)
+    }
     var isSavingAudio = false  // Loading state for audio save
 
     // MARK: - Translation State
@@ -204,7 +195,7 @@ final class AppState {
                 selectedTranslationModel = translationProvider.defaultModelId
             }
             // Clear subtitle translation cache and reset error state
-            SubtitleTranslationService.shared.clearCache()
+            SubtitleTranslationService.shared.invalidate(appState: self)
             if case .error = subtitleTranslationState {
                 subtitleTranslationState = .idle
             }
@@ -221,7 +212,7 @@ final class AppState {
         didSet {
             guard !isLoadingPreferences else { return }
             // Clear subtitle translation cache and reset error state when language changes
-            SubtitleTranslationService.shared.clearCache()
+            SubtitleTranslationService.shared.invalidate(appState: self)
             if case .error = subtitleTranslationState {
                 subtitleTranslationState = .idle
             }
@@ -527,6 +518,7 @@ final class AppState {
                 subtitleTranslationEnabled = false
                 return
             }
+            SubtitleTranslationService.shared.invalidate(appState: self)
             savePreferences()
         }
     }
@@ -568,7 +560,6 @@ final class AppState {
 
     // MARK: - Common State
     var isProcessing = false
-    var errorMessage: String?
     var showFloatingWindow = false
     var showFloatingMicButton = false
 
@@ -583,10 +574,16 @@ final class AppState {
     var realtimeSTTService: RealtimeSTTService?  // Internal for FloatingMicButtonManager access
     private var isLoadingPreferences = false  // Flag to prevent saving during load
     private var savePreferencesWorkItem: DispatchWorkItem?  // Debounce coalescing for savePreferences
+    private var willTerminateObserver: NSObjectProtocol?  // Flushes pending preference save on quit
     private var ttsService: TTSService?
     private var fileTranscriptionTask: Task<Void, Never>?
 
-    private init() {
+    private let persistsPreferences: Bool
+    var ttsServiceFactory: (TTSProvider) -> TTSService = { TTSFactory.makeService(for: $0) }
+
+    init(startServices: Bool = true) {
+        persistsPreferences = startServices
+        guard startServices else { return }
         loadPreferences()
         // Record first launch date if not already set
         if firstLaunchDate == nil {
@@ -598,6 +595,18 @@ final class AppState {
         setupOCRCallbacks()
         // Pre-cache macOS Translation language availability
         checkMacOSTranslationLanguageAvailability()
+
+        // Flush any pending debounced preference save on quit, otherwise the
+        // last change made inside the 0.3s debounce window would be lost
+        willTerminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.flushPendingPreferencesSave()
+            }
+        }
     }
 
     private func setupOCRCallbacks() {
@@ -608,12 +617,9 @@ final class AppState {
             self.showTTSPanelWithText(text)
         }
 
-        ocrCoordinator.onError = { [weak self] error in
-            guard let self = self else { return }
+        ocrCoordinator.onError = { error in
             if let error = error {
                 dprint("OCR Error: \(error.localizedDescription)")
-
-                self.errorMessage = error.localizedDescription
             }
             // nil error indicates cancellation - no action needed
         }
@@ -670,7 +676,6 @@ final class AppState {
     /// Enable subtitle mode and start recording
     /// Public for AppleScript access
     func showSubtitleMode() {
-        guard !subtitleModeEnabled else { return }  // Already enabled
         subtitleModeEnabled = true
         // Start recording if not already recording (subtitle needs recording to display)
         if !isRecording {
@@ -757,7 +762,6 @@ final class AppState {
 
         // Note: Don't auto-sync translation provider - let user's choice persist
 
-        errorMessage = nil
         currentTranscription = ""
         currentSessionTranscription = ""
         transcriptionState = .idle
@@ -800,7 +804,6 @@ final class AppState {
         subtitleTranslationState = .idle
         SubtitleTranslationService.shared.reset()
 
-        errorMessage = nil
 
         // IMMEDIATELY show preparing state for instant user feedback
         transcriptionState = .preparing
@@ -819,6 +822,20 @@ final class AppState {
             // case we must NOT flip isRecording to true, otherwise the menu bar shows
             // "録音中" while the panel shows the error and a Record button.
             await MainActor.run {
+                // If recording was cancelled while preparing (e.g. the panel was
+                // closed), cancelRecording() has already reset the state to .idle
+                // without stopping the STT service (isRecording is still false at
+                // that point). Abort here so recording doesn't start after cancel.
+                if transcriptionState == .idle {
+                    realtimeSTTService?.stopListening()
+                    realtimeSTTService = nil
+                    if systemAudioCaptureService.isCapturing {
+                        Task {
+                            await systemAudioCaptureService.stopCapturing()
+                        }
+                    }
+                    return
+                }
                 if case .error = transcriptionState {
                     return
                 }
@@ -900,7 +917,6 @@ final class AppState {
                 try await systemAudioCaptureService.startCapturingAppAudio(bundleID: selectedAudioAppBundleID)
             }
         } catch {
-            errorMessage = error.localizedDescription
             transcriptionState = .error(error.localizedDescription)
         }
     }
@@ -936,7 +952,6 @@ final class AppState {
         do {
             try await realtimeSTTService?.startListening()
         } catch {
-            errorMessage = error.localizedDescription
             transcriptionState = .error(error.localizedDescription)
         }
     }
@@ -992,6 +1007,7 @@ final class AppState {
     func stopRecordingAndInsert(_ text: String) {
         // Stop recording first
         isRecording = false
+        stopDurationTimer()
         realtimeSTTService?.stopListening()
         realtimeSTTService = nil
         transcriptionState = .idle
@@ -1177,7 +1193,7 @@ final class AppState {
                 dprint("TTS: No selected text retrieved; panel ready for manual input")
                 return
             }
-            dprint("TTS: Got selected text, length: \(fetched.count), content: '\(fetched.prefix(200))'")
+            dprint("TTS: Got selected text, length: \(fetched.count)")
 
             // Only populate if the panel text is still empty (user hasn't typed)
             guard ttsText.isEmpty else {
@@ -1235,13 +1251,14 @@ final class AppState {
         dprint("TTS: speakCurrentText, text length: \(ttsText.count), provider: \(selectedTTSProvider.rawValue)")
 
 
+        stopTTSPlayback()
         ttsState = .loading
 
         // Apply text replacement rules before speaking
         let processedText = TextReplacementService.shared.applyReplacements(to: ttsText)
 
         // Start TTS playback
-        ttsService = TTSFactory.makeService(for: selectedTTSProvider)
+        ttsService = ttsServiceFactory(selectedTTSProvider)
         ttsService?.delegate = self
         ttsService?.selectedVoice = selectedTTSVoice
         if !selectedTTSModel.isEmpty {
@@ -1254,16 +1271,18 @@ final class AppState {
         ttsService?.audioOutputDeviceUID = selectedAudioOutputDeviceUID
 
         // Store the text being spoken
-        lastSynthesizedText = ttsText
+        let cacheKey = synthesisKey(for: ttsText)
+        let generation = ttsGeneration
+        guard let service = ttsService else { return }
 
-        Task {
+        ttsPlaybackTask = Task {
             do {
-                // speak() will call delegate.ttsDidStartSpeaking() when playback starts
-                // and delegate.tts(didFinishSpeaking:) when it completes
-                try await ttsService?.speak(text: processedText)
+                try await service.speak(text: processedText)
+                guard !Task.isCancelled, ttsGeneration == generation, ttsService === service else { return }
+                lastSynthesisKey = cacheKey
             } catch {
-                dprint("TTS: Error occurred: \(error)")
-
+                guard !Task.isCancelled, ttsGeneration == generation, ttsService === service else { return }
+                service.stop()
                 ttsState = .error(error.localizedDescription)
             }
         }
@@ -1287,6 +1306,11 @@ final class AppState {
 
     /// Stop TTS playback without resetting UI state (used internally)
     private func stopTTSPlayback() {
+        ttsGeneration = UUID()
+        ttsPlaybackTask?.cancel()
+        ttsPlaybackTask = nil
+        lastSynthesisKey = nil
+        ttsService?.delegate = nil
         ttsService?.stop()
         ttsService?.clearAudioCache()
         ttsService = nil
@@ -1295,7 +1319,7 @@ final class AppState {
     func stopTTS() {
         stopTTSPlayback()
         ttsState = .idle
-        lastSynthesizedText = ""  // Clear cache reference
+        lastSynthesisKey = nil
 
         // Ensure window state flag is in sync (in case stopTTS is called directly)
         if showTTSWindow && !floatingWindowManager.isVisible {
@@ -1317,13 +1341,13 @@ final class AppState {
     private var saveAudioTask: Task<Void, Never>?
 
     /// Synthesize and save TTS audio
-    /// - Reuses existing audio data if text matches lastSynthesizedText and audio is complete
+    /// - Reuses complete audio only when every synthesis input matches
     /// - Otherwise synthesizes new audio using non-streaming mode before saving
     func synthesizeAndSaveTTSAudio(_ text: String) {
         guard text.count >= 5 else { return }
 
         // Check if we can reuse existing audio data (must be complete, not partial streaming data)
-        if text == lastSynthesizedText,
+        if synthesisKey(for: text) == lastSynthesisKey,
            let audioData = ttsService?.lastAudioData,
            !audioData.isEmpty {
             // Reuse existing audio - show save panel directly (no loading state needed)
@@ -1353,8 +1377,6 @@ final class AppState {
         // allowing us to stop playback and get complete audio data
         saveService.useStreamingMode = false
 
-        // Capture file extension before Task (MainActor isolated)
-        let fileExtension = saveService.audioFileExtension
 
         saveAudioTask = Task { @MainActor in
             defer {
@@ -1388,9 +1410,8 @@ final class AppState {
                 // Get the audio data
                 if let audioData = saveService.lastAudioData, !audioData.isEmpty {
                     // Update cache for potential reuse
-                    self.lastSynthesizedText = text
                     self.isSavingAudio = false
-                    self.showSavePanel(with: audioData, fileExtension: fileExtension)
+                    self.showSavePanel(with: audioData, fileExtension: saveService.audioFileExtension)
                 } else {
                     self.isSavingAudio = false
                     self.ttsState = .error("Failed to generate audio")
@@ -1435,6 +1456,18 @@ final class AppState {
                     } catch {
                         dprint("Failed to save audio: \(error)")
 
+                        // Notify the user - the save panel already closed, so without
+                        // this alert the failure would be completely silent
+                        let alert = NSAlert()
+                        alert.messageText = NSLocalizedString("Could Not Save Audio", comment: "Audio save error alert title")
+                        alert.informativeText = error.localizedDescription
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
+
+                        // Configure alert to appear above floating panels
+                        alert.window.level = .floating + 1
+
+                        alert.runModal()
                     }
                 }
             }
@@ -1501,54 +1534,6 @@ final class AppState {
     /// Cancel OCR operation
     func cancelOCR() {
         ocrCoordinator.cancel()
-    }
-
-    // MARK: - Translation Provider Sync
-
-    /// Sync translation provider based on STT provider when STT panel opens
-    private func syncTranslationProviderForSTT() {
-        switch selectedRealtimeProvider {
-        case .openAI:
-            if translationProvider != .openAI {
-                translationProvider = .openAI
-            }
-        case .gemini:
-            if translationProvider != .gemini {
-                translationProvider = .gemini
-            }
-        case .grok:
-            if translationProvider != .grok {
-                translationProvider = .grok
-            }
-        case .elevenLabs, .macOS:
-            // ElevenLabs/macOS don't have corresponding translation providers, use macOS
-            if translationProvider != .macOS {
-                translationProvider = .macOS
-            }
-        }
-    }
-
-    /// Sync translation provider based on TTS provider when TTS panel opens
-    private func syncTranslationProviderForTTS() {
-        switch selectedTTSProvider {
-        case .openAI:
-            if translationProvider != .openAI {
-                translationProvider = .openAI
-            }
-        case .gemini:
-            if translationProvider != .gemini {
-                translationProvider = .gemini
-            }
-        case .grok:
-            if translationProvider != .grok {
-                translationProvider = .grok
-            }
-        case .elevenLabs, .macOS:
-            // ElevenLabs/macOS don't have corresponding translation providers, use macOS
-            if translationProvider != .macOS {
-                translationProvider = .macOS
-            }
-        }
     }
 
     // MARK: - Translation Methods
@@ -1784,7 +1769,6 @@ final class AppState {
 
         // Show STT panel if not already visible
         if !showFloatingWindow {
-            errorMessage = nil
             currentTranscription = ""
             currentSessionTranscription = ""
             showFloatingWindowWithState()
@@ -1877,33 +1861,6 @@ final class AppState {
             selectedRealtimeSTTModel = sttModel
         }
 
-        // Migrate legacy Grok Voice Agent STT model ID to the dedicated STT API model.
-        if selectedRealtimeProvider == .grok && selectedRealtimeSTTModel == "grok-2-public" {
-            selectedRealtimeSTTModel = "grok-stt"
-        }
-
-        // Migrate deprecated OpenAI gpt-4o-transcribe (retired 2026-02-28) to the
-        // current streaming-optimized default.
-        if selectedRealtimeProvider == .openAI && selectedRealtimeSTTModel == "gpt-4o-transcribe" {
-            selectedRealtimeSTTModel = "gpt-realtime-whisper"
-        }
-
-        // Migrate Gemini 2.0 Flash Live (deprecated 2026-02-18, shutdown 2026-06-01)
-        // to the Gemini 3.1 Flash Live preview successor.
-        if selectedRealtimeProvider == .gemini && selectedRealtimeSTTModel == "gemini-2.0-flash-live-001" {
-            selectedRealtimeSTTModel = "gemini-3.1-flash-live-preview"
-        }
-
-        if let providerRaw = UserDefaults.standard.string(forKey: "selectedProvider"),
-           let provider = STTProvider(rawValue: providerRaw) {
-            selectedProvider = provider
-        }
-
-        if let modelRaw = UserDefaults.standard.string(forKey: "selectedModel"),
-           let model = STTModel(rawValue: modelRaw) {
-            selectedModel = model
-        }
-
         if let ttsProviderRaw = UserDefaults.standard.string(forKey: "selectedTTSProvider"),
            let ttsProvider = TTSProvider(rawValue: ttsProviderRaw) {
             selectedTTSProvider = ttsProvider
@@ -1915,50 +1872,6 @@ final class AppState {
 
         if let ttsModel = UserDefaults.standard.string(forKey: "selectedTTSModel") {
             selectedTTSModel = ttsModel
-        }
-
-        // Migrate deprecated Gemini TTS model IDs (removed from the selectable list).
-        // Old values stay functional internally, but the Settings picker won't show them,
-        // so nudge affected users onto the current default.
-        if selectedTTSProvider == .gemini {
-            let deprecatedGeminiTTSModels: Set<String> = [
-                "gemini-2.5-flash-preview-tts",
-                "gemini-2.5-pro-preview-tts"
-            ]
-            if deprecatedGeminiTTSModels.contains(selectedTTSModel) {
-                selectedTTSModel = "gemini-3.1-flash-tts-preview"
-            }
-        }
-
-        // Migrate deprecated OpenAI TTS model IDs (removed from the selectable list).
-        // gpt-4o-mini-tts (undated), tts-1, and tts-1-hd are all deprecated by OpenAI.
-        if selectedTTSProvider == .openAI {
-            let deprecatedOpenAITTSModels: Set<String> = [
-                "gpt-4o-mini-tts",
-                "tts-1",
-                "tts-1-hd"
-            ]
-            if deprecatedOpenAITTSModels.contains(selectedTTSModel) {
-                selectedTTSModel = "gpt-4o-mini-tts-2025-12-15"
-            }
-        }
-
-        // Migrate older ElevenLabs TTS models (removed from the selectable list).
-        // multilingual_v2 / turbo_v2_5 / monolingual_v1 are superseded by v3 / flash_v2_5.
-        if selectedTTSProvider == .elevenLabs {
-            let supersededElevenLabsTTSModels: Set<String> = [
-                "eleven_multilingual_v2",
-                "eleven_turbo_v2_5",
-                "eleven_monolingual_v1"
-            ]
-            if supersededElevenLabsTTSModels.contains(selectedTTSModel) {
-                selectedTTSModel = "eleven_v3"
-            }
-        }
-
-        // Migrate legacy Grok Voice Agent model ID to the dedicated TTS API model.
-        if selectedTTSProvider == .grok && selectedTTSModel == "grok-2-public" {
-            selectedTTSModel = "grok-tts"
         }
 
         if UserDefaults.standard.object(forKey: "selectedTTSSpeed") != nil {
@@ -2069,16 +1982,7 @@ final class AppState {
            let provider = TranslationProvider(rawValue: translationProviderRaw) {
             translationProvider = provider
         }
-        if let savedModel = UserDefaults.standard.string(forKey: "selectedTranslationModel") {
-            let availableIds = translationProvider.availableModels.map { $0.id }
-            if availableIds.contains(savedModel) {
-                selectedTranslationModel = savedModel
-            } else {
-                selectedTranslationModel = translationProvider.defaultModelId
-            }
-        } else {
-            selectedTranslationModel = translationProvider.defaultModelId
-        }
+        selectedTranslationModel = UserDefaults.standard.string(forKey: "selectedTranslationModel") ?? ""
         if let translationTargetRaw = UserDefaults.standard.string(forKey: "translationTargetLanguage"),
            let language = LanguageCode(rawValue: translationTargetRaw) {
             translationTargetLanguage = language
@@ -2100,6 +2004,15 @@ final class AppState {
 
         // Validate providers: fall back to macOS if selected provider requires API key but it's not available
         validateSelectedProviders()
+        let stt = RealtimeSTTFactory.makeService(for: selectedRealtimeProvider)
+        selectedRealtimeSTTModel = ModelSelection.resolve(selectedRealtimeSTTModel,
+            availableIDs: stt.availableModels().map(\.id), defaultID: stt.defaultModelId)
+        let tts = TTSFactory.makeService(for: selectedTTSProvider)
+        selectedTTSModel = ModelSelection.resolve(selectedTTSModel,
+            availableIDs: tts.availableModels().map(\.id), defaultID: tts.defaultModelId)
+        selectedTranslationModel = ModelSelection.resolve(selectedTranslationModel,
+            availableIDs: translationProvider.availableModels.map(\.id), defaultID: translationProvider.defaultModelId)
+
     }
 
     /// Validate that selected providers are available (have API keys if required)
@@ -2152,6 +2065,7 @@ final class AppState {
     }
 
     private func savePreferences() {
+        guard persistsPreferences else { return }
         // Debounce: coalesce rapid didSet calls into a single UserDefaults write
         savePreferencesWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
@@ -2162,11 +2076,16 @@ final class AppState {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
     }
 
+    /// Flush a pending debounced preference save (called on app termination)
+    private func flushPendingPreferencesSave() {
+        savePreferencesWorkItem?.cancel()
+        savePreferencesWorkItem = nil
+        savePreferencesNow()
+    }
+
     private func savePreferencesNow() {
         UserDefaults.standard.set(selectedRealtimeProvider.rawValue, forKey: "selectedRealtimeProvider")
         UserDefaults.standard.set(selectedRealtimeSTTModel, forKey: "selectedRealtimeSTTModel")
-        UserDefaults.standard.set(selectedProvider.rawValue, forKey: "selectedProvider")
-        UserDefaults.standard.set(selectedModel.rawValue, forKey: "selectedModel")
         UserDefaults.standard.set(selectedTTSProvider.rawValue, forKey: "selectedTTSProvider")
         UserDefaults.standard.set(selectedTTSVoice, forKey: "selectedTTSVoice")
         UserDefaults.standard.set(selectedTTSModel, forKey: "selectedTTSModel")
@@ -2300,42 +2219,45 @@ extension AppState: HotKeyServiceDelegate {
         dprint("TTS HotKey: Captured frontmost app: \(frontmostApp?.localizedName ?? "none") (bundle: \(frontmostApp?.bundleIdentifier ?? "none")), isSpeechDock: \(isSpeechDockFrontmost)")
 
 
-        var copiedText: String? = nil
-
-        if !isSpeechDockFrontmost, let targetApp = frontmostApp {
-            // Save original clipboard content before overwriting
-            let savedClipboardState = ClipboardService.shared.saveClipboardState()
-
-            // Ensure target app is activated and has keyboard focus
-            targetApp.activate()
-            Thread.sleep(forTimeInterval: 0.05)  // 50ms for activation
-
-            // Send Cmd+C while target app is frontmost
-            let clipboardChangeCount = NSPasteboard.general.changeCount
-            sendCopyCommand()
-
-            // Wait for copy to complete
-            Thread.sleep(forTimeInterval: 0.15)  // 150ms for clipboard
-
-            // Check if clipboard was updated
-            let newChangeCount = NSPasteboard.general.changeCount
-            if newChangeCount != clipboardChangeCount {
-                // Read the best available text representation, preferring HTML/RTF
-                // so that paragraph breaks are preserved (plain text collapses them)
-                copiedText = TextSelectionService.shared.readBestTextFromPasteboard()
-            }
-            dprint("TTS HotKey: Clipboard changed: \(newChangeCount != clipboardChangeCount), text length: \(copiedText?.count ?? 0)")
-
-
-            // Restore original clipboard content after capturing text
-            if copiedText != nil {
-                ClipboardService.shared.restoreClipboardState(savedClipboardState)
-                dprint("TTS HotKey: Restored original clipboard content")
-
-            }
-        }
-
+        // Run the copy sequence as an async task so the hotkey callback thread is
+        // not blocked by Thread.sleep. The wait durations and the clipboard
+        // save/restore timing are kept identical to the previous implementation.
         Task { @MainActor in
+            var copiedText: String? = nil
+
+            if !isSpeechDockFrontmost, let targetApp = frontmostApp {
+                // Save original clipboard content before overwriting
+                let savedClipboardState = ClipboardService.shared.saveClipboardState()
+
+                // Ensure target app is activated and has keyboard focus
+                targetApp.activate()
+                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms for activation
+
+                // Send Cmd+C while target app is frontmost
+                let clipboardChangeCount = NSPasteboard.general.changeCount
+                self.sendCopyCommand()
+
+                // Wait for copy to complete
+                try? await Task.sleep(nanoseconds: 150_000_000)  // 150ms for clipboard
+
+                // Check if clipboard was updated
+                let newChangeCount = NSPasteboard.general.changeCount
+                if newChangeCount != clipboardChangeCount {
+                    // Read the best available text representation, preferring HTML/RTF
+                    // so that paragraph breaks are preserved (plain text collapses them)
+                    copiedText = TextSelectionService.shared.readBestTextFromPasteboard()
+                }
+                dprint("TTS HotKey: Clipboard changed: \(newChangeCount != clipboardChangeCount), text length: \(copiedText?.count ?? 0)")
+
+
+                // Restore original clipboard content after capturing text
+                if copiedText != nil {
+                    ClipboardService.shared.restoreClipboardState(savedClipboardState)
+                    dprint("TTS HotKey: Restored original clipboard content")
+
+                }
+            }
+
             self.toggleTTS(frontmostApp: frontmostApp, precopiedText: copiedText)
         }
     }
@@ -2428,7 +2350,14 @@ extension AppState: RealtimeSTTDelegate {
     }
 
     func realtimeSTT(_ service: RealtimeSTTService, didFailWithError error: Error) {
-        errorMessage = error.localizedDescription
+
+        // Tear down the recording session exactly as stopRecording() does.
+        // Without this, a mid-recording STT failure leaves `isRecording` true
+        // (menu bar stuck on "Recording"), the duration timer firing every
+        // 0.1s, and system audio capture running, even though the STT service
+        // below is discarded.
+        isRecording = false
+        stopDurationTimer()
 
         // Preserve accumulated text if any — save to history and keep in panel
         let text = currentTranscription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2445,6 +2374,24 @@ extension AppState: RealtimeSTTDelegate {
 
         // Clean up the service if it was in processing state
         realtimeSTTService = nil
+
+        // Stop system audio capture if active
+        if systemAudioCaptureService.isCapturing {
+            Task {
+                await systemAudioCaptureService.stopCapturing()
+            }
+        }
+
+        // Hide subtitle overlay and restore panel (deferred to avoid blocking)
+        let shouldRestorePanel = subtitleHidePanelWhenActive && showFloatingWindow
+        Task { @MainActor in
+            SubtitleOverlayManager.shared.hide()
+            if shouldRestorePanel {
+                // Small delay to let UI settle before bringing panel back
+                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+                floatingWindowManager.bringToFront()
+            }
+        }
     }
 
     func realtimeSTT(_ service: RealtimeSTTService, didChangeListeningState isListening: Bool) {
@@ -2456,18 +2403,22 @@ extension AppState: RealtimeSTTDelegate {
 
 extension AppState: TTSDelegate {
     func tts(_ service: TTSService, willSpeakRange range: NSRange, of text: String) {
+        guard ttsService === service else { return }
         // Word highlighting removed - streaming mode doesn't provide timing info
     }
 
     func ttsDidStartSpeaking(_ service: TTSService) {
+        guard ttsService === service else { return }
         ttsState = .speaking
     }
 
     func tts(_ service: TTSService, didFinishSpeaking successfully: Bool) {
+        guard ttsService === service else { return }
         ttsState = .idle
     }
 
     func tts(_ service: TTSService, didFailWithError error: Error) {
+        guard ttsService === service else { return }
         ttsState = .error(error.localizedDescription)
     }
 }
@@ -2481,7 +2432,6 @@ extension AppState: SystemAudioCaptureDelegate {
     }
 
     func systemAudioCapture(_ capture: SystemAudioCaptureService, didFailWithError error: Error) {
-        errorMessage = error.localizedDescription
         transcriptionState = .error(error.localizedDescription)
     }
 }

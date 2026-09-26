@@ -166,6 +166,12 @@ final class FloatingMicButtonManager {
     }
 
     func hide() {
+        // Stop any active quick-mode recording before hiding the button,
+        // so recording doesn't continue invisibly
+        if appState?.isRecording == true {
+            stopRecording()
+        }
+
         saveWindowPosition()
         positionSaveTimer?.invalidate()
         positionSaveTimer = nil
@@ -232,6 +238,7 @@ final class FloatingMicButtonManager {
     // MARK: - Recording Control
 
     func startRecording() {
+        guard finishRecordingTask == nil else { return }
         guard let appState = appState else {
             logger.error("startRecording: appState is nil")
             return
@@ -271,41 +278,55 @@ final class FloatingMicButtonManager {
         startQuickSTT()
     }
 
+    private var finishRecordingTask: Task<String, Never>?
+
     func stopRecording() {
-        guard let appState = appState else { return }
-        guard appState.isRecording else { return }
+        _ = beginFinishingRecording()
+    }
 
-        logger.debug("Stopping recording, transcription length=\(appState.currentTranscription.count)")
+    /// All stop callers share one finalization; AppleScript awaits the same result.
+    func stopRecordingAndWait() async -> String {
+        guard let task = beginFinishingRecording() else { return "" }
+        return await task.value
+    }
 
-        // Stop the STT service
-        appState.realtimeSTTService?.stopListening()
-        appState.realtimeSTTService = nil
+    private func beginFinishingRecording() -> Task<String, Never>? {
+        if let task = finishRecordingTask { return task }
+        guard let appState, appState.isRecording else { return nil }
+        let service = appState.realtimeSTTService
+        let initialText = appState.currentTranscription
         appState.isRecording = false
-
+        appState.transcriptionState = .processing
         appState.durationTimer?.invalidate()
         appState.durationTimer = nil
         appState.recordingStartTime = nil
 
-        // Insert final text (HUD will be hidden after insertion completes)
-        let finalText = appState.currentTranscription.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !finalText.isEmpty {
-            // Update HUD to show "Pasting..." status
-            NotificationCenter.default.post(
-                name: FloatingMicConstants.transcriptionUpdatedNotification,
-                object: finalText + "\n(Pasting...)"
-            )
-            insertFinalText(finalText)
-        } else {
-            // No text to insert, hide HUD immediately
-            FloatingMicTextHUD.shared.hide()
+        let task = Task { @MainActor [self] in
+            defer { finishRecordingTask = nil }
+            let finalText: String
+            if let service {
+                finalText = await STTFinalization.finish(service, initialText: initialText)
+            } else {
+                finalText = initialText.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            // A different recording may have taken over via another UI.
+            guard appState.realtimeSTTService === service else { return finalText }
+            appState.realtimeSTTService = nil
+            if !finalText.isEmpty {
+                NotificationCenter.default.post(name: FloatingMicConstants.transcriptionUpdatedNotification,
+                    object: finalText + "\n(Pasting...)")
+                insertFinalText(finalText)
+            } else {
+                FloatingMicTextHUD.shared.hide()
+            }
+            appState.transcriptionState = .idle
+            appState.currentTranscription = ""
+            lastInsertedPartialText = ""
+            isUsingDirectInsertion = false
+            return finalText
         }
-
-        // Reset state
-        appState.transcriptionState = .idle
-        appState.currentTranscription = ""
-        lastInsertedPartialText = ""
-        isUsingDirectInsertion = false
-        // Note: targetApp is cleared after insertion completes
+        finishRecordingTask = task
+        return task
     }
 
     func toggleRecording() {
@@ -450,21 +471,35 @@ final class FloatingMicButtonManager {
 
         // Close any open panels first
         if appState.showFloatingWindow {
+            appState.floatingWindowManager.hideFloatingWindow()
             appState.showFloatingWindow = false
         }
         if appState.showTTSWindow {
             appState.stopTTS()
+            appState.floatingWindowManager.hideFloatingWindow()
             appState.showTTSWindow = false
         }
 
         appState.currentTranscription = ""
-        appState.errorMessage = nil
         appState.transcriptionState = .preparing
 
         Task {
             await appState.startRealtimeSTTForQuickMode(delegate: self)
 
             await MainActor.run {
+                // If startRealtimeSTTForQuickMode failed it sets transcriptionState to .error;
+                // in that case we must NOT flip isRecording to true
+                if case .error(let message) = appState.transcriptionState {
+                    // Show why instead of just closing the HUD — quick mode has
+                    // no panel, so a silent close leaves the user with nothing
+                    // (missing API key is the common case here).
+                    if let buttonFrame = buttonWindow?.frame {
+                        FloatingMicTextHUD.shared.showError(message, near: buttonFrame)
+                    } else {
+                        FloatingMicTextHUD.shared.hide()
+                    }
+                    return
+                }
                 appState.isRecording = true
                 appState.transcriptionState = .recording
 
@@ -781,42 +816,28 @@ final class FloatingMicButtonManager {
 // MARK: - RealtimeSTTDelegate
 
 extension FloatingMicButtonManager: RealtimeSTTDelegate {
-    nonisolated func realtimeSTT(_ service: RealtimeSTTService, didReceivePartialResult text: String) {
-        Task { @MainActor in
-            guard let appState = appState else { return }
-            appState.currentTranscription = text
-            handlePartialTranscription(text)
-            logger.debug("Partial result received, length=\(text.count)")
-        }
+    func realtimeSTT(_ service: RealtimeSTTService, didReceivePartialResult text: String) {
+        guard let appState, appState.realtimeSTTService === service else { return }
+        appState.currentTranscription = text
+        handlePartialTranscription(text)
     }
 
-    nonisolated func realtimeSTT(_ service: RealtimeSTTService, didReceiveFinalResult text: String) {
-        Task { @MainActor in
-            guard let appState = appState else { return }
-            appState.currentTranscription = text
-            handleFinalTranscription(text)
-            logger.debug("Final result received, length=\(text.count)")
-        }
+    func realtimeSTT(_ service: RealtimeSTTService, didReceiveFinalResult text: String) {
+        guard let appState, appState.realtimeSTTService === service else { return }
+        appState.currentTranscription = text
+        handleFinalTranscription(text)
     }
 
-    nonisolated func realtimeSTT(_ service: RealtimeSTTService, didFailWithError error: Error) {
-        Task { @MainActor in
-            guard let appState = appState else { return }
-            appState.errorMessage = error.localizedDescription
-            appState.transcriptionState = .error(error.localizedDescription)
-            logger.error("Error: \(error.localizedDescription, privacy: .public)")
-            stopRecording()
-        }
+    func realtimeSTT(_ service: RealtimeSTTService, didFailWithError error: Error) {
+        guard let appState, appState.realtimeSTTService === service else { return }
+        appState.transcriptionState = .error(error.localizedDescription)
+        let frame = buttonWindow?.frame
+        stopRecording()
+        if let frame { FloatingMicTextHUD.shared.showError(error.localizedDescription, near: frame) }
     }
 
-    nonisolated func realtimeSTT(_ service: RealtimeSTTService, didChangeListeningState isListening: Bool) {
-        Task { @MainActor in
-            guard let appState = appState else { return }
-            logger.debug("Listening state changed: \(isListening)")
-            if !isListening && appState.isRecording {
-                // VAD or service stopped - finalize
-                stopRecording()
-            }
-        }
+    func realtimeSTT(_ service: RealtimeSTTService, didChangeListeningState isListening: Bool) {
+        guard let appState, appState.realtimeSTTService === service else { return }
+        if !isListening && appState.isRecording { stopRecording() }
     }
 }

@@ -14,6 +14,16 @@ struct ShortcutSettingsView: View {
     var body: some View {
         ScrollView {
             Form {
+                if let service = appState.hotKeyService, !service.registrationErrors.isEmpty {
+                    Section("Shortcut conflicts") {
+                        ForEach(service.registrationErrors.keys.sorted(), id: \.self) { key in
+                            Text("\(NSLocalizedString(key, comment: "Shortcut action")): \(service.registrationErrors[key] ?? "")")
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+
                 Section {
                     ShortcutRecorderView(title: NSLocalizedString("Toggle STT Panel", comment: "Hotkey"), keyCombo: $sttKeyCombo)
                         .onChange(of: sttKeyCombo) { _, newValue in
@@ -139,8 +149,14 @@ struct PanelShortcutRow: View {
 
     var body: some View {
         HStack {
-            Text(action.displayName)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading) {
+                Text(action.displayName)
+                if !manager.conflicts(for: action).isEmpty {
+                    Text(String(format: NSLocalizedString("Also used by: %@", comment: "Duplicate shortcut"), manager.conflicts(for: action).map(\.displayName).joined(separator: ", ")))
+                        .font(.caption).foregroundStyle(.red)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             PanelShortcutRecorder(
                 shortcut: currentShortcut,

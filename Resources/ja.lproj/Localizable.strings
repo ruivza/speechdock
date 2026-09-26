@@ -480,3 +480,65 @@
 "── Enhanced ──" = "── エンハンスド ──";
 "── Standard ──" = "── スタンダード ──";
 "N/A" = "N/A";
+
+"Supported text files: %@" = "対応するテキストファイル: %@";
+"The file could not be read as text. Save plain text as UTF-8, or use a valid RTF file." = "テキストとして読み込めませんでした。プレーンテキストは UTF-8 で保存するか、有効な RTF ファイルを使用してください。";
+"Could Not Import Text" = "テキストを読み込めませんでした";
+"API key not set" = "API キー未設定";
+"Language not supported" = "未対応の言語";
+
+"Allow only the features you need. Text to speech works without microphone access." = "必要な機能の権限だけを許可してください。読み上げはマイクの許可なしで使用できます。";
+
+"For inserting text into other apps" = "ほかのアプリへのテキスト挿入に使用";
+
+"For OCR, system/app audio capture and window thumbnails" = "OCR、システム・アプリ音声の取り込み、ウィンドウのサムネイルに使用";
+
+"If Screen Recording is enabled in System Settings but still unavailable here, restart SpeechDock." = "システム設定で画面収録を許可しても利用できない場合は、SpeechDock を再起動してください。";
+
+"Microphone access is needed to record speech. You can still use text to speech without it." = "音声入力にはマイクの許可が必要です。許可しなくても読み上げは使用できます。";
+
+"Screen Recording access is needed to capture system or app audio." = "システム・アプリ音声の取り込みには画面収録の許可が必要です。";
+
+"Screen Recording access is needed to capture text with OCR." = "OCR で画面の文字を取り込むには画面収録の許可が必要です。";
+
+"Accessibility access is needed to insert text into another app. You can still copy and paste manually." = "ほかのアプリへのテキスト挿入にはアクセシビリティの許可が必要です。手動でのコピーと貼り付けは使用できます。";
+
+"Granted" = "許可済み";
+
+"Not requested" = "未許可（未要求）";
+
+"Denied" = "拒否済み";
+
+"Restricted" = "制限されています";
+
+"Not granted" = "未許可";
+
+"Allow" = "許可する";
+"Accessibility is used to capture selected text" = "選択テキストの取得にはアクセシビリティを使用します";
+"Permissions..." = "権限...";
+"Continue" = "続ける";
+
+/* Interface and permission guidance */
+"Also used by: %@" = "同じキーを使用: %@";
+"Click or %@ to dictate; drag to move" = "クリックまたは%@で音声入力、ドラッグで移動";
+"Click to dictate; drag to move" = "クリックで音声入力・ドラッグで移動";
+"Copied to Clipboard" = "クリップボードにコピー済み";
+"Downloading language model: %d%%" = "言語モデルをダウンロード中: %d%%";
+"Drag to move window" = "ドラッグでウィンドウを移動";
+"Maximum %d MB · Duration: %@" = "最大%d MB・長さ: %@";
+"Maximum 100 MB · No duration limit" = "最大100 MB・長さの上限なし";
+"No speech could be recognized." = "音声を認識できませんでした。";
+"Paste could not be verified. You can paste the copied text manually." = "貼り付けを確認できませんでした。コピー済みのテキストを手動で貼り付けられます。";
+"Preparing speech recognition..." = "音声認識を準備中…";
+"Recording %@ — click or %@ to stop" = "録音中 %@ — クリックまたは%@で停止";
+"Select the language you will speak. macOS recognition uses this language." = "話す言語を選択してください。macOSの音声認識にはこの言語を使います。";
+"Shortcut conflicts" = "ショートカットの問題";
+"Shortcut could not be registered (error %d). Choose another combination." = "ショートカットを登録できません（エラー%d）。別のキーの組み合わせを選んでください。";
+"SpeechDock Settings" = "SpeechDockの設定";
+"Close subtitles" = "字幕を閉じる";
+"Stopped" = "停止中";
+"%@ to stop" = "%@で停止";
+"No limit" = "上限なし";
+"~10 min" = "約10分";
+"~2 hours" = "約2時間";
+"On-device speech recognition (macOS 26+)" = "デバイス内での音声認識（macOS 26以降）";

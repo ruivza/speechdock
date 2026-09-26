@@ -63,7 +63,7 @@ final class FloatingMicTextHUD {
         window.backgroundColor = .clear
         window.level = .floating + 1
         window.hasShadow = true
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = ToolWindowPolicy.currentSpace
         window.isReleasedWhenClosed = false
 
         let contentView = FloatingMicTextHUDView(manager: self)
@@ -96,7 +96,7 @@ final class FloatingMicTextHUD {
         window.backgroundColor = .clear
         window.level = .floating + 1
         window.hasShadow = true
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = ToolWindowPolicy.currentSpace
         window.isReleasedWhenClosed = false
 
         let contentView = FloatingMicTextHUDView(manager: self, errorMessage: message)
@@ -307,6 +307,8 @@ final class FloatingMicTextHUD {
 
 struct FloatingMicTextHUDView: View {
     let manager: FloatingMicTextHUD
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// When non-nil the HUD shows this error instead of transcription text
     var errorMessage: String?
     @State private var text: String = ""
@@ -340,7 +342,7 @@ struct FloatingMicTextHUDView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.75))
+                .fill(Color.black.opacity(reduceTransparency ? 1 : 0.85))
         )
         .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
         .contentShape(Rectangle())
@@ -396,22 +398,22 @@ struct FloatingMicTextHUDView: View {
             // Header with recording indicator and stop shortcut
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.red)
+                    .fill(AppState.shared.isRecording ? Color.red : Color.orange)
                     .frame(width: 8, height: 8)
-                Text("Recording")
+                Text(AppState.shared.isRecording ? NSLocalizedString("Recording...", comment: "Quick microphone state") : NSLocalizedString("Preparing speech recognition...", comment: "Quick microphone state"))
                     .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.6))
-                Text("(\(shortcutString) to stop)")
+                    .foregroundColor(.white.opacity(0.8))
+                Text(String(format: NSLocalizedString("%@ to stop", comment: "Stop shortcut"), shortcutString))
                     .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.4))
+                    .foregroundColor(.white.opacity(0.8))
                 Spacer()
             }
 
             // Scrollable transcription text area
             if text.isEmpty {
-                Text("Listening...")
+                Text(AppState.shared.recordingPreparationMessage ?? NSLocalizedString("Listening...", comment: "Quick microphone state"))
                     .font(.system(size: fontSize))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(.white.opacity(0.8))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ScrollViewReader { proxy in
@@ -426,7 +428,7 @@ struct FloatingMicTextHUDView: View {
                     .frame(maxHeight: maxTextHeight)
                     .onChange(of: text) { _, _ in
                         // Smooth scroll to bottom when text changes
-                        withAnimation(.easeOut(duration: 0.1)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.1)) {
                             proxy.scrollTo("hudText", anchor: .bottom)
                         }
                     }

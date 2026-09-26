@@ -80,11 +80,18 @@ struct STTModelPicker: View {
     @State private var availableModels: [RealtimeSTTModelInfo] = []
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
         Picker("Model", selection: $appState.selectedRealtimeSTTModel) {
             ForEach(availableModels) { model in
-                Text(modelDisplayName(model))
+                Text(model.name).help(model.description)
                     .tag(model.id)
             }
+        }
+        .help(availableModels.first { $0.id == appState.selectedRealtimeSTTModel }.map { "\($0.name): \($0.description)" } ?? "")
+        if let model = availableModels.first(where: { $0.id == appState.selectedRealtimeSTTModel }), !model.description.isEmpty {
+            Text(model.description).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         }
         .onAppear {
             loadModels()
@@ -107,13 +114,7 @@ struct STTModelPicker: View {
         }
     }
 
-    private func modelDisplayName(_ model: RealtimeSTTModelInfo) -> String {
-        if model.description.isEmpty {
-            return model.name
-        } else {
-            return "\(model.name) - \(model.description)"
-        }
-    }
+
 }
 
 /// Language picker for STT provider
@@ -165,7 +166,7 @@ struct STTLanguagePicker: View {
     private var languageHelpText: String {
         switch appState.selectedRealtimeProvider {
         case .macOS:
-            return NSLocalizedString("Auto uses system locale. Select a specific language for better accuracy.", comment: "STT language help")
+            return NSLocalizedString("Select the language you will speak. macOS recognition uses this language.", comment: "STT language help")
         case .openAI:
             return NSLocalizedString("Auto detects the language. Specifying a language can improve accuracy.", comment: "STT language help")
         case .gemini:
@@ -188,7 +189,7 @@ struct AudioInputSourcePicker: View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Audio Source", selection: $appState.selectedAudioInputSourceType) {
                 ForEach(availableSourceTypes) { sourceType in
-                    Label(sourceType.rawValue, systemImage: sourceType.icon)
+                    Label(sourceType.displayName, systemImage: sourceType.icon)
                         .tag(sourceType)
                 }
             }

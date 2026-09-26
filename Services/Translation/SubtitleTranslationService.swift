@@ -128,7 +128,7 @@ final class SubtitleTranslationService {
 
         // Update last known text
         lastSTTText = trimmedText
-        dprint("SubtitleTranslation: text='\(trimmedText.prefix(40))...', isFinal=\(isFinal), provider=\(appState.translationProvider.displayName)")
+        dprint("SubtitleTranslation: text='\(trimmedText.prefix(40))...', isFinal=\(isFinal), provider=\(appState.effectiveTranslationProvider.displayName)")
 
 
         if isFinal {
@@ -142,7 +142,7 @@ final class SubtitleTranslationService {
             await translateFullText(trimmedText, appState: appState)
         } else {
             // Partial result - schedule debounced translation
-            dprint("SubtitleTranslation: isFinal=false, scheduling debounced translation (interval: \(debounceIntervals[appState.translationProvider] ?? defaultDebounceInterval)ns)")
+            dprint("SubtitleTranslation: isFinal=false, scheduling debounced translation (interval: \(debounceIntervals[appState.effectiveTranslationProvider] ?? defaultDebounceInterval)ns)")
 
             await scheduleTranslation(fullText: trimmedText, appState: appState)
             // Start pause check for auto-confirm
@@ -193,7 +193,7 @@ final class SubtitleTranslationService {
 
     /// Ensure translator is set up for current provider
     private func ensureTranslator(for appState: AppState) async {
-        let provider = appState.translationProvider
+        let provider = appState.effectiveTranslationProvider
         let targetLang = appState.translationTargetLanguage
 
         // Check if we need to create/recreate translator
@@ -230,7 +230,7 @@ final class SubtitleTranslationService {
     private func scheduleTranslation(fullText: String, appState: AppState) async {
         debounceTask?.cancel()
 
-        let interval = debounceIntervals[appState.translationProvider] ?? defaultDebounceInterval
+        let interval = debounceIntervals[appState.effectiveTranslationProvider] ?? defaultDebounceInterval
         let textToTranslate = fullText
 
         debounceTask = Task { [weak self, weak appState] in
@@ -269,7 +269,7 @@ final class SubtitleTranslationService {
 
         // Check cache first
         let token = generation
-        let provider = appState.translationProvider
+        let provider = appState.effectiveTranslationProvider
         let language = appState.translationTargetLanguage
         let cacheKey = "\(provider.rawValue):" + makeCacheKey(text: text, language: language)
         if let cached = translationCache[cacheKey] {
@@ -360,7 +360,7 @@ final class SubtitleTranslationService {
 
     private func isCurrent(_ token: UUID, provider: TranslationProvider, language: LanguageCode, appState: AppState) -> Bool {
         !Task.isCancelled && token == generation && appState.subtitleTranslationEnabled
-            && appState.translationProvider == provider && appState.translationTargetLanguage == language
+            && appState.effectiveTranslationProvider == provider && appState.translationTargetLanguage == language
     }
 
     /// Start periodic check for pause-based translation trigger

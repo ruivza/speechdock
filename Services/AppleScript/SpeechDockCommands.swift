@@ -368,7 +368,7 @@ class StopQuickTranscriptionCommand: NSScriptCommand {
             let manager = FloatingMicButtonManager.shared
 
             // Check if recording
-            if !appState.isRecording {
+            if !appState.isRecording && appState.transcriptionState != .preparing {
                 self.setAppleScriptError(.sttNotRecording,
                     message: "Quick transcription is not currently recording.")
                 self.resumeExecution(withResult: nil)
@@ -461,7 +461,7 @@ class ToggleSTTPanelCommand: NSScriptCommand {
             // Small delay to ensure activation completes
             try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
 
-            AppState.shared.toggleRecording()
+            AppState.shared.toggleSTTPanelVisibility()
             self.resumeExecution(withResult: nil)
         }
         return nil
@@ -517,7 +517,7 @@ class ToggleTTSPanelCommand: NSScriptCommand {
             // Small delay to ensure activation completes
             try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
 
-            AppState.shared.toggleTTS()
+            AppState.shared.toggleTTSPanelVisibility()
             self.resumeExecution(withResult: nil)
         }
         return nil
@@ -602,6 +602,54 @@ class StartOCRCommand: NSScriptCommand {
             try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
 
             AppState.shared.startOCR()
+            self.resumeExecution(withResult: nil)
+        }
+        return nil
+    }
+}
+
+class HideSTTPanelCommand: NSScriptCommand {
+    override func performDefaultImplementation() -> Any? {
+        suspendExecution()
+        Task { @MainActor in
+            guard await self.waitForInitialization(timeout: 5) else {
+                self.setAppleScriptError(.appNotInitialized, message: "SpeechDock is still initializing.")
+                self.resumeExecution(withResult: nil)
+                return
+            }
+            AppState.shared.hideSTTPanel()
+            self.resumeExecution(withResult: nil)
+        }
+        return nil
+    }
+}
+
+class HideTTSPanelCommand: NSScriptCommand {
+    override func performDefaultImplementation() -> Any? {
+        suspendExecution()
+        Task { @MainActor in
+            guard await self.waitForInitialization(timeout: 5) else {
+                self.setAppleScriptError(.appNotInitialized, message: "SpeechDock is still initializing.")
+                self.resumeExecution(withResult: nil)
+                return
+            }
+            AppState.shared.hideTTSPanel()
+            self.resumeExecution(withResult: nil)
+        }
+        return nil
+    }
+}
+
+class HideSubtitleCommand: NSScriptCommand {
+    override func performDefaultImplementation() -> Any? {
+        suspendExecution()
+        Task { @MainActor in
+            guard await self.waitForInitialization(timeout: 5) else {
+                self.setAppleScriptError(.appNotInitialized, message: "SpeechDock is still initializing.")
+                self.resumeExecution(withResult: nil)
+                return
+            }
+            AppState.shared.hideSubtitleMode()
             self.resumeExecution(withResult: nil)
         }
         return nil

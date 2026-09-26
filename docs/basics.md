@@ -25,15 +25,17 @@ It works immediately after installation with no API keys required; a language mo
 
 ### Permissions
 
-SpeechDock requires or recommends the following permissions:
+Permissions are needed only for the features that use them. Text to speech does not require microphone access.
 
-| Permission | Level | Purpose |
-|------------|-------|---------|
-| **Microphone** | Required | Speech recognition input |
-| **Accessibility** | Recommended | Global keyboard shortcuts and text insertion |
-| **Screen Recording** | Optional | System/App Audio capture, OCR, and window thumbnails |
+| Permission | Used for |
+|------------|----------|
+| **Microphone** | Recording speech from a microphone |
+| **Accessibility** | Capturing selected text and inserting text into other apps |
+| **Screen Recording** | System/App Audio capture, OCR, and window thumbnails |
 
-On first launch, SpeechDock displays a permission setup window with real-time status indicators. Grant permissions in **System Settings** > **Privacy & Security** — the setup window updates automatically without restarting the app. Features that require missing permissions are disabled in the UI with clear visual indicators.
+You can choose **Continue** or **Later** without granting permissions. This choice is remembered, so setup does not reappear at every launch. Use **Permissions...** in the menu bar to review it. When you start a feature that needs missing access, SpeechDock explains what to allow. The setup shows microphone access as not requested, denied, restricted, or granted. Screen Recording and Accessibility show whether access is available; macOS does not expose their denial history. If Screen Recording is enabled in **System Settings > Privacy & Security** but remains unavailable, restart SpeechDock.
+
+SpeechDock stays in the Dock while an STT/TTS panel, Settings, or permission setup is open, and returns to menu-bar-only mode when all of these windows close. Subtitles, the quick mic button, and other helper displays do not keep it in the Dock.
 
 ## Speech-to-Text (STT)
 
@@ -104,6 +106,8 @@ Open the TTS panel with the global hotkey (default: `Ctrl + Option + T`), or fro
 - Type text directly in the panel
 - Select text in another app, then press the TTS hotkey (auto-captures selected text)
 - Use OCR to capture text from the screen
+
+**Text files**: Drop a `.txt`, `.md`, `.text`, or `.rtf` file (up to 1 MB) onto the editor or panel margin. Its contents are inserted at the drop position, preserving existing text. Press `Cmd + Z` to undo. Plain text must be UTF-8; unreadable or unsupported files show an error and do not insert a path.
 
 **Auto-speak**: When enabled, automatically starts speaking the captured text when the panel opens.
 

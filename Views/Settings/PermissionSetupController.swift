@@ -8,6 +8,7 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
     static let shared = PermissionSetupController()
 
     private var window: NSWindow?
+    private let setupReason = PermissionSetupReason()
 
     private override init() {
         super.init()
@@ -15,7 +16,9 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
 
     /// Show the permission setup window.
     /// Starts permission monitoring and displays the checklist.
-    func show() {
+    func show(reason: String? = nil) {
+        setupReason.message = reason
+
         // If window already exists and is visible, just bring it to front
         if let window = window, window.isVisible {
             NSApp.activate(ignoringOtherApps: true)
@@ -26,10 +29,8 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
         // Start monitoring permissions
         PermissionService.shared.startMonitoring()
 
-        // Show in Dock while permission setup is open
-        NSApp.setActivationPolicy(.regular)
-
         let setupView = PermissionSetupView(
+            reason: setupReason,
             onContinue: { [weak self] in
                 self?.dismiss()
             },
@@ -45,14 +46,15 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
         window.identifier = NSUserInterfaceItemIdentifier("permissionSetup")
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 480, height: 420))
+        window.setContentSize(NSSize(width: 540, height: 530))
         window.center()
         window.delegate = self
 
-        // Disable automatic key view loop to prevent Liquid Glass focus ring
-        window.autorecalculatesKeyViewLoop = false
+        // Keep Tab navigation; suppress only the initial focus below.
+        window.autorecalculatesKeyViewLoop = true
 
         self.window = window
+        ActivationPolicyCoordinator.shared.windowWillShow(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
 
@@ -75,16 +77,11 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
+        PermissionService.shared.completeSetup()
         window = nil
         PermissionService.shared.stopMonitoring()
-        // Only drop back to accessory when no other windows are open —
-        // otherwise the Dock icon disappears while e.g. Settings is still
-        // visible (same fix as FloatingWindowManager.hideFloatingWindow).
-        let hasOtherWindows = NSApp.windows.contains {
-            $0.identifier?.rawValue == "settings" && $0.isVisible
-        }
-        if !hasOtherWindows {
-            NSApp.setActivationPolicy(.accessory)
+        if let closedWindow = notification.object as? NSWindow {
+            ActivationPolicyCoordinator.shared.windowDidHide(closedWindow)
         }
     }
 }

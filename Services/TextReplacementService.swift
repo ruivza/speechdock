@@ -336,7 +336,7 @@ final class TextReplacementService: ObservableObject {
         savePanel.title = NSLocalizedString("Export Text Replacement Rules", comment: "Export save panel title")
         savePanel.message = NSLocalizedString("Choose a location to save the rules", comment: "Export save panel message")
 
-        savePanel.begin { [weak self] response in
+        WindowPresentation.panel(savePanel) { [weak self] response in
             guard response == .OK, let url = savePanel.url, let self = self else { return }
 
             do {
@@ -366,7 +366,7 @@ final class TextReplacementService: ObservableObject {
         openPanel.title = NSLocalizedString("Import Text Replacement Rules", comment: "Import open panel title")
         openPanel.message = NSLocalizedString("Select a JSON file to import", comment: "Import open panel message")
 
-        openPanel.begin { [weak self] response in
+        WindowPresentation.panel(openPanel) { [weak self] response in
             guard response == .OK, let url = openPanel.url, let self = self else { return }
 
             do {

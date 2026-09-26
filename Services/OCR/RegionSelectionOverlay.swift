@@ -51,7 +51,7 @@ class RegionSelectionOverlay: NSWindow {
         self.ignoresMouseEvents = false
         self.acceptsMouseMovedEvents = true
         self.hasShadow = false
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        self.collectionBehavior = ToolWindowPolicy.currentSpace
 
         // Create selection view
         selectionView = SelectionView(frame: self.frame)

@@ -72,6 +72,8 @@ protocol RealtimeSTTDelegate: AnyObject {
     /// Called when an error occurs
     func realtimeSTT(_ service: RealtimeSTTService, didFailWithError error: Error)
 
+    func realtimeSTT(_ service: RealtimeSTTService, didUpdatePreparation message: String?)
+
     /// Called when listening state changes
     func realtimeSTT(_ service: RealtimeSTTService, didChangeListeningState isListening: Bool)
 }
@@ -249,4 +251,8 @@ enum RealtimeSTTFactory {
             return GrokRealtimeSTT()
         }
     }
+}
+
+extension RealtimeSTTDelegate {
+    func realtimeSTT(_ service: RealtimeSTTService, didUpdatePreparation message: String?) {}
 }

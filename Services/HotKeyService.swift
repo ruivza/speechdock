@@ -13,13 +13,15 @@ protocol HotKeyServiceDelegate: AnyObject {
     func quickTranscriptionHotKeyPressed()
 }
 
+@Observable
 final class HotKeyService {
-    private var sttHotKey: HotKey?
-    private var ttsHotKey: HotKey?
-    private var ocrHotKey: HotKey?
-    private var subtitleHotKey: HotKey?
-    private var shortcutHUDHotKey: HotKey?
-    private var quickTranscriptionHotKey: HotKey?
+    private(set) var registrationErrors: [String: String] = [:]
+    private var sttHotKey: RegisteredHotKey?
+    private var ttsHotKey: RegisteredHotKey?
+    private var ocrHotKey: RegisteredHotKey?
+    private var subtitleHotKey: RegisteredHotKey?
+    private var shortcutHUDHotKey: RegisteredHotKey?
+    private var quickTranscriptionHotKey: RegisteredHotKey?
     private var isLoadingShortcuts = false
 
     weak var delegate: HotKeyServiceDelegate?
@@ -28,7 +30,7 @@ final class HotKeyService {
         didSet {
             guard !isLoadingShortcuts else { return }
             saveShortcuts()
-            registerHotKey()
+            registerAllHotKeys()
         }
     }
 
@@ -36,7 +38,7 @@ final class HotKeyService {
         didSet {
             guard !isLoadingShortcuts else { return }
             saveShortcuts()
-            registerTTSHotKey()
+            registerAllHotKeys()
         }
     }
 
@@ -44,7 +46,7 @@ final class HotKeyService {
         didSet {
             guard !isLoadingShortcuts else { return }
             saveShortcuts()
-            registerOCRHotKey()
+            registerAllHotKeys()
         }
     }
 
@@ -52,7 +54,7 @@ final class HotKeyService {
         didSet {
             guard !isLoadingShortcuts else { return }
             saveShortcuts()
-            registerSubtitleHotKey()
+            registerAllHotKeys()
         }
     }
 
@@ -60,7 +62,7 @@ final class HotKeyService {
         didSet {
             guard !isLoadingShortcuts else { return }
             saveShortcuts()
-            registerShortcutHUDHotKey()
+            registerAllHotKeys()
         }
     }
 
@@ -68,7 +70,7 @@ final class HotKeyService {
         didSet {
             guard !isLoadingShortcuts else { return }
             saveShortcuts()
-            registerQuickTranscriptionHotKey()
+            registerAllHotKeys()
         }
     }
 
@@ -88,7 +90,10 @@ final class HotKeyService {
         sttHotKey = nil
 
         // Create new hotkey
-        sttHotKey = HotKey(key: sttKeyCombo.key, modifiers: sttKeyCombo.modifiers)
+        sttHotKey = RegisteredHotKey(keyCode: sttKeyCombo.key.carbonKeyCode, modifiers: sttKeyCombo.modifiers.carbonFlags)
+        if let status = sttHotKey?.status, status != 0 {
+            registrationErrors["Transcription"] = String(format: NSLocalizedString("Shortcut could not be registered (error %d). Choose another combination.", comment: "Hotkey registration error"), status)
+        } else { registrationErrors.removeValue(forKey: "Transcription") }
         logger.info("STT HotKey registered: \(self.sttKeyCombo.displayString)")
 
         sttHotKey?.keyDownHandler = { [weak self] in
@@ -102,7 +107,10 @@ final class HotKeyService {
         ttsHotKey = nil
 
         // Create new hotkey
-        ttsHotKey = HotKey(key: ttsKeyCombo.key, modifiers: ttsKeyCombo.modifiers)
+        ttsHotKey = RegisteredHotKey(keyCode: ttsKeyCombo.key.carbonKeyCode, modifiers: ttsKeyCombo.modifiers.carbonFlags)
+        if let status = ttsHotKey?.status, status != 0 {
+            registrationErrors["Text to Speech"] = String(format: NSLocalizedString("Shortcut could not be registered (error %d). Choose another combination.", comment: "Hotkey registration error"), status)
+        } else { registrationErrors.removeValue(forKey: "Text to Speech") }
         logger.info("TTS HotKey registered: \(self.ttsKeyCombo.displayString)")
 
         ttsHotKey?.keyDownHandler = { [weak self] in
@@ -116,7 +124,10 @@ final class HotKeyService {
         ocrHotKey = nil
 
         // Create new hotkey
-        ocrHotKey = HotKey(key: ocrKeyCombo.key, modifiers: ocrKeyCombo.modifiers)
+        ocrHotKey = RegisteredHotKey(keyCode: ocrKeyCombo.key.carbonKeyCode, modifiers: ocrKeyCombo.modifiers.carbonFlags)
+        if let status = ocrHotKey?.status, status != 0 {
+            registrationErrors["OCR"] = String(format: NSLocalizedString("Shortcut could not be registered (error %d). Choose another combination.", comment: "Hotkey registration error"), status)
+        } else { registrationErrors.removeValue(forKey: "OCR") }
         logger.info("OCR HotKey registered: \(self.ocrKeyCombo.displayString)")
 
         ocrHotKey?.keyDownHandler = { [weak self] in
@@ -130,7 +141,10 @@ final class HotKeyService {
         subtitleHotKey = nil
 
         // Create new hotkey
-        subtitleHotKey = HotKey(key: subtitleKeyCombo.key, modifiers: subtitleKeyCombo.modifiers)
+        subtitleHotKey = RegisteredHotKey(keyCode: subtitleKeyCombo.key.carbonKeyCode, modifiers: subtitleKeyCombo.modifiers.carbonFlags)
+        if let status = subtitleHotKey?.status, status != 0 {
+            registrationErrors["Subtitle"] = String(format: NSLocalizedString("Shortcut could not be registered (error %d). Choose another combination.", comment: "Hotkey registration error"), status)
+        } else { registrationErrors.removeValue(forKey: "Subtitle") }
         logger.info("Subtitle HotKey registered: \(self.subtitleKeyCombo.displayString)")
 
         subtitleHotKey?.keyDownHandler = { [weak self] in
@@ -142,7 +156,10 @@ final class HotKeyService {
     func registerShortcutHUDHotKey() {
         shortcutHUDHotKey = nil
 
-        shortcutHUDHotKey = HotKey(key: shortcutHUDKeyCombo.key, modifiers: shortcutHUDKeyCombo.modifiers)
+        shortcutHUDHotKey = RegisteredHotKey(keyCode: shortcutHUDKeyCombo.key.carbonKeyCode, modifiers: shortcutHUDKeyCombo.modifiers.carbonFlags)
+        if let status = shortcutHUDHotKey?.status, status != 0 {
+            registrationErrors["Keyboard Shortcuts"] = String(format: NSLocalizedString("Shortcut could not be registered (error %d). Choose another combination.", comment: "Hotkey registration error"), status)
+        } else { registrationErrors.removeValue(forKey: "Keyboard Shortcuts") }
         logger.info("ShortcutHUD HotKey registered: \(self.shortcutHUDKeyCombo.displayString)")
 
         shortcutHUDHotKey?.keyDownHandler = { [weak self] in
@@ -154,7 +171,10 @@ final class HotKeyService {
     func registerQuickTranscriptionHotKey() {
         quickTranscriptionHotKey = nil
 
-        quickTranscriptionHotKey = HotKey(key: quickTranscriptionKeyCombo.key, modifiers: quickTranscriptionKeyCombo.modifiers)
+        quickTranscriptionHotKey = RegisteredHotKey(keyCode: quickTranscriptionKeyCombo.key.carbonKeyCode, modifiers: quickTranscriptionKeyCombo.modifiers.carbonFlags)
+        if let status = quickTranscriptionHotKey?.status, status != 0 {
+            registrationErrors["Quick Transcription"] = String(format: NSLocalizedString("Shortcut could not be registered (error %d). Choose another combination.", comment: "Hotkey registration error"), status)
+        } else { registrationErrors.removeValue(forKey: "Quick Transcription") }
         logger.info("QuickTranscription HotKey registered: \(self.quickTranscriptionKeyCombo.displayString)")
 
         quickTranscriptionHotKey?.keyDownHandler = { [weak self] in
@@ -164,6 +184,7 @@ final class HotKeyService {
     }
 
     func registerAllHotKeys() {
+        unregisterAllHotKeys()
         registerHotKey()
         registerTTSHotKey()
         registerOCRHotKey()

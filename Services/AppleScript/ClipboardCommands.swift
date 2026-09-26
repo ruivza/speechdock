@@ -50,8 +50,14 @@ class PasteTextCommand: NSScriptCommand {
                 return
             }
 
-            await ClipboardService.shared.copyAndPaste(text)
-            self.resumeExecution(withResult: nil)
+            let verified = await ClipboardService.shared.copyAndPaste(text)
+            if !verified && NSPasteboard.general.string(forType: .string) != text {
+                self.scriptErrorNumber = -10000
+                self.scriptErrorString = "Could not copy the text to the clipboard."
+                self.resumeExecution(withResult: nil)
+            } else {
+                self.resumeExecution(withResult: verified ? "inserted" : "copied to clipboard")
+            }
         }
 
         return nil

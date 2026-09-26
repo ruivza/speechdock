@@ -35,7 +35,7 @@ final class FileTranscriptionService {
     static let shared = FileTranscriptionService()
 
     /// Supported audio file extensions (union of all providers)
-    private let supportedExtensions: Set<String> = ["mp3", "wav", "m4a", "aac", "aiff", "webm", "ogg", "flac", "mp4"]
+    private let supportedExtensions = Set(AudioFileSupport.extensions)
 
     private init() {}
 
@@ -102,7 +102,7 @@ final class FileTranscriptionService {
         // Check extension
         let fileExtension = url.pathExtension.lowercased()
         guard supportedExtensions.contains(fileExtension) else {
-            throw FileTranscriptionError.unsupportedFormat(fileExtension, supportedFormats: provider.supportedAudioFormats)
+            throw FileTranscriptionError.unsupportedFormat(fileExtension, supportedFormats: AudioFileSupport.formatHint)
         }
 
         // Check file size against provider-specific limit

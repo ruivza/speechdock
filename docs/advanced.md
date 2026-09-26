@@ -127,6 +127,8 @@ While macOS on-device translation supports ~18 languages, cloud providers offer:
 
 The translation provider is independent of STT and TTS. Changing a speech provider does not change the translation provider. Choose it in Settings or the translation controls.
 
+When the saved translation provider cannot be used, the panel and subtitles show and use the same available provider, with a short reason such as “API key not set.” macOS translation hides the cloud model selector. Your saved preference is retained.
+
 ## Subtitle Real-time Translation
 
 When using subtitle mode, you can enable real-time translation that translates speech as you speak. This works with all audio sources (microphone, system audio, app audio).
@@ -187,6 +189,19 @@ When using cloud providers:
 - Each provider has its own privacy policy and data retention rules
 - For maximum privacy, use macOS native providers (all processing on-device)
 - API keys are stored in macOS Keychain and never shared between providers
+
+
+### Panels, files, and accessibility
+
+Translation is an optional, collapsible section below the text. Speech controls remain separate. Settings can be widened; model descriptions appear below their short names. Tab navigation keeps its focus indication. The quick microphone supports accessibility activation and shows a one-time click/drag hint; Reduce Motion disables its pulse. Panels use a system material, with opaque backgrounds when Reduce Transparency or Increase Contrast is enabled.
+
+File transcription appends to the existing draft. An empty recognition result leaves it unchanged. The chooser and drop areas accept MP3, WAV, M4A, AAC, AIFF/AIF, WebM, OGG, FLAC, and MP4; decoding still depends on the chosen provider. Local macOS transcription allows up to 100 MB with no duration limit. Cloud providers retain their displayed size limits. Speech recognition downloads its initial language model before opening the microphone, shows progress separately, and can be cancelled.
+
+Stopping subtitles keeps the overlay and its text visible. Use Close to remove it. Alerts and save dialogs attach to the active window. Window positions are fitted to connected displays after a display change. If an automatic paste cannot be confirmed, SpeechDock leaves the text on the clipboard and says so. Shortcut registration failures and duplicate panel shortcuts appear in Settings.
+
+### Spaces and full screen
+
+Subtitles, the quick microphone, its HUD, the shortcut panel, and the menu open on the current Space and can accompany another app in full screen. They do not appear on every Space. Open or invoke a tool again to bring it to the active Space. Editable STT/TTS panels activate SpeechDock and show its Dock icon; opening them from another app’s full screen moves to a normal desktop Space. Settings and ordinary window-style panels follow normal macOS window behavior. OCR captures the selected display region using ScreenCaptureKit.
 
 ---
 

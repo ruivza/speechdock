@@ -20,11 +20,9 @@ final class WindowManager {
             settingsNavigation.selectedCategory = category
         }
 
-        // Show in Dock while Settings is open
-        NSApp.setActivationPolicy(.regular)
-
         // If window already exists and is visible, just bring it to front
         if let window = settingsWindow, window.isVisible {
+            ActivationPolicyCoordinator.shared.windowWillShow(window)
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             return
@@ -36,7 +34,7 @@ final class WindowManager {
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "SpeechDock Settings"
+        window.title = NSLocalizedString("SpeechDock Settings", comment: "Settings window")
         window.identifier = NSUserInterfaceItemIdentifier("settings")
         window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
@@ -54,17 +52,18 @@ final class WindowManager {
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.settingsWindow = nil
-                NSApp.setActivationPolicy(.accessory)
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                if let window { ActivationPolicyCoordinator.shared.windowDidHide(window) }
+                if self?.settingsWindow === window { self?.settingsWindow = nil }
             }
         }
 
-        // Disable automatic key view loop to prevent Liquid Glass focus ring
-        window.autorecalculatesKeyViewLoop = false
+        // Preserve keyboard navigation; only clear initial focus below.
+        window.autorecalculatesKeyViewLoop = true
 
         settingsWindow = window
+        ActivationPolicyCoordinator.shared.windowWillShow(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
 

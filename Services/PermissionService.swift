@@ -12,12 +12,31 @@ final class PermissionService {
 
     // MARK: - Permission State
 
-    private(set) var microphoneGranted: Bool = false
-    private(set) var accessibilityGranted: Bool = false
-    private(set) var screenRecordingGranted: Bool = false
+    private(set) var snapshot = PermissionSnapshot(microphone: .notRequested, accessibility: false, screenRecording: false)
+    var microphoneGranted: Bool { snapshot.microphone == .granted }
+    var accessibilityGranted: Bool { snapshot.accessibility }
+    var screenRecordingGranted: Bool { snapshot.screenRecording }
+    var microphoneStatus: PermissionAccessStatus { snapshot.microphone }
 
-    /// All required permissions (Microphone) are granted
-    var allRequiredGranted: Bool { microphoneGranted }
+    private let defaults: UserDefaults
+    private let readPermissions: () -> PermissionSnapshot
+    private static let setupCompletedKey = "permissionSetupCompleted"
+    var shouldShowSetupOnLaunch: Bool { hasAnyMissing && !defaults.bool(forKey: Self.setupCompletedKey) }
+
+    func completeSetup() {
+        defaults.set(true, forKey: Self.setupCompletedKey)
+    }
+
+    /// Called at feature entry points; dismissing setup never grants access.
+    @discardableResult
+    func ensureAccess(for feature: PermissionFeature,
+                      showSetup: ((String) -> Void)? = nil) -> Bool {
+        refreshAllPermissions()
+        guard let reason = snapshot.missingPermission(for: feature) else { return true }
+        if let showSetup { showSetup(reason) }
+        else { PermissionSetupController.shared.show(reason: reason) }
+        return false
+    }
 
     /// All permissions are granted
     var allGranted: Bool { microphoneGranted && accessibilityGranted && screenRecordingGranted }
@@ -33,7 +52,12 @@ final class PermissionService {
 
     // MARK: - Init
 
-    private init() {
+    init(defaults: UserDefaults = .standard, readPermissions: @escaping () -> PermissionSnapshot = {
+        PermissionSnapshot(microphone: .microphone(AVCaptureDevice.authorizationStatus(for: .audio)),
+                           accessibility: AXIsProcessTrusted(), screenRecording: CGPreflightScreenCaptureAccess())
+    }) {
+        self.defaults = defaults
+        self.readPermissions = readPermissions
         refreshAllPermissions()
     }
 
@@ -41,9 +65,7 @@ final class PermissionService {
 
     /// Refresh all permission states immediately
     func refreshAllPermissions() {
-        microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        accessibilityGranted = AXIsProcessTrusted()
-        screenRecordingGranted = CGPreflightScreenCaptureAccess()
+        snapshot = readPermissions()
     }
 
     // MARK: - Monitoring
@@ -56,7 +78,7 @@ final class PermissionService {
 
         refreshAllPermissions()
         startPolling()
-        startAccessibilityNotificationListener()
+        startActivationListener()
         dprint("PermissionService: Started monitoring")
 
     }
@@ -70,7 +92,7 @@ final class PermissionService {
         pollingTask = nil
 
         if let observer = notificationObserver {
-            DistributedNotificationCenter.default().removeObserver(observer)
+            NotificationCenter.default.removeObserver(observer)
             notificationObserver = nil
         }
         dprint("PermissionService: Stopped monitoring")
@@ -79,12 +101,11 @@ final class PermissionService {
 
     /// Polling loop with adaptive intervals.
     /// Fast polling (0.5s) for the first 10 seconds, then slower (2s).
-    /// Stops when all permissions are granted or after 5 minutes.
+    /// Continues while the setup window is open, including after a revocation.
     private func startPolling() {
         pollingTask?.cancel()
         pollingTask = Task { [weak self] in
             var elapsedSeconds: Double = 0
-            let maxDuration: Double = 300 // 5 minutes
 
             while !Task.isCancelled {
                 let interval: Double = elapsedSeconds < 10 ? 0.5 : 2.0
@@ -94,27 +115,16 @@ final class PermissionService {
 
                 self?.refreshAllPermissions()
 
-                if self?.allGranted == true {
-                    dprint("PermissionService: All permissions granted, stopping polling")
-
-                    break
-                }
-
                 elapsedSeconds += interval
-                if elapsedSeconds >= maxDuration {
-                    dprint("PermissionService: Polling timeout reached")
 
-                    break
-                }
             }
         }
     }
 
-    /// Listen for Accessibility permission changes via DistributedNotificationCenter.
-    /// This provides faster detection than polling for accessibility changes.
-    private func startAccessibilityNotificationListener() {
-        notificationObserver = DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.apple.accessibility.api"),
+    /// Recheck on return from System Settings using a public AppKit notification.
+    private func startActivationListener() {
+        notificationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: nil
         ) { [weak self] _ in
@@ -135,7 +145,7 @@ final class PermissionService {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         if status == .notDetermined {
             let granted = await AVCaptureDevice.requestAccess(for: .audio)
-            microphoneGranted = granted
+            refreshAllPermissions()
             return granted
         }
         return status == .authorized

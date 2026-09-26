@@ -65,6 +65,8 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
     private var accumulatedTranscription = ""  // Accumulated final transcriptions
     private var resultsTask: Task<Void, Never>?
     private let audioLevelMonitor = AudioLevelMonitor.shared
+    private var startupGeneration = UUID()
+    private var installationProgress: Progress?
     private var sessionID = 0  // Incremented per session to invalidate stale async work
 
     // MARK: - Initialization
@@ -79,6 +81,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         // Stop any existing session
         stopListening()
         sessionID &+= 1
+        let startup = startupGeneration
 
         #if DEBUG
         let startTime = Date()
@@ -91,18 +94,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
             isPreBuffering = true
         }
 
-        // Start audio capture FIRST to avoid missing initial audio
-        if audioSource == .microphone {
-            try await startAudioCapture()
-        }
-
-        isListening = true
-        audioLevelMonitor.start()
-        delegate?.realtimeSTT(self, didChangeListeningState: true)
-
-        #if DEBUG
-        debugLog("SpeechAnalyzerSTT: Audio capture started, now setting up analyzer...")
-        #endif
+        delegate?.realtimeSTT(self, didUpdatePreparation: NSLocalizedString("Preparing speech recognition...", comment: "STT preparation"))
 
         // Create locale based on selected language
         // Note: macOS provider does not offer Auto — language is always explicitly set
@@ -140,17 +132,32 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         // Previously a missing model surfaced as an opaque start failure and users
         // had to discover the manual download path themselves.
         let supportedIds = await SpeechTranscriber.supportedLocales.map { $0.identifier(.bcp47) }
+        try Task.checkCancellation()
+        guard startupGeneration == startup else { throw CancellationError() }
         guard supportedIds.contains(locale.identifier(.bcp47)) else {
             throw RealtimeSTTError.serviceUnavailable(
                 "Speech recognition for \(locale.identifier) is not supported on this system")
         }
         if let installationRequest = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try Task.checkCancellation()
+            guard startupGeneration == startup else { throw CancellationError() }
             debugLog("SpeechAnalyzerSTT: Language model for \(locale.identifier) missing — downloading...")
-            delegate?.realtimeSTT(self, didReceivePartialResult: "[Downloading language model...]")
+            installationProgress = installationRequest.progress
+            let progressTask = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    guard let self, self.startupGeneration == startup else { return }
+                    let percent = Int(installationRequest.progress.fractionCompleted * 100)
+                    self.delegate?.realtimeSTT(self, didUpdatePreparation: String(format: NSLocalizedString("Downloading language model: %d%%", comment: "STT model download"), percent))
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+            }
+            defer { progressTask.cancel(); installationProgress = nil }
             try await installationRequest.downloadAndInstall()
-            delegate?.realtimeSTT(self, didReceivePartialResult: "")
             debugLog("SpeechAnalyzerSTT: Language model installed")
         }
+
+        try Task.checkCancellation()
+        guard startupGeneration == startup else { throw CancellationError() }
 
         // Initialize SpeechAnalyzer with the transcriber module
         let analyzer = SpeechAnalyzer(modules: [transcriber])
@@ -163,7 +170,9 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
 
         // Prewarm model resources before start — documented pattern to cut
         // first-result latency on a fresh session.
-        try? await analyzer.prepareToAnalyze(in: analyzerFormat)
+        try await analyzer.prepareToAnalyze(in: analyzerFormat)
+        try Task.checkCancellation()
+        guard startupGeneration == startup else { throw CancellationError() }
 
         // Create AsyncStream for audio input
         let (inputSequence, continuation) = AsyncStream<AnalyzerInput>.makeStream()
@@ -186,6 +195,19 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         debugLog("SpeechAnalyzerSTT: Analyzer started, flushing pre-buffer...")
         #endif
 
+        try Task.checkCancellation()
+        guard startupGeneration == startup else { throw CancellationError() }
+        if audioSource == .microphone { try await startAudioCapture() }
+        try Task.checkCancellation()
+        guard startupGeneration == startup else {
+            audioEngine?.stop()
+            throw CancellationError()
+        }
+        isListening = true
+        audioLevelMonitor.start()
+        delegate?.realtimeSTT(self, didUpdatePreparation: nil)
+        delegate?.realtimeSTT(self, didChangeListeningState: true)
+
         // Flush pre-buffered audio to the analyzer
         await flushPreBuffer()
 
@@ -202,6 +224,9 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
     }
 
     func stopListening() {
+        startupGeneration = UUID()
+        installationProgress?.cancel()
+        installationProgress = nil
         // Stop audio engine
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -292,7 +317,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
         [RealtimeSTTModelInfo(
             id: "default",
             name: "Apple Speech",
-            description: "Advanced on-device speech recognition (macOS 26+)",
+            description: NSLocalizedString("On-device speech recognition (macOS 26+)", comment: "Apple Speech model description"),
             isDefault: true
         )]
     }

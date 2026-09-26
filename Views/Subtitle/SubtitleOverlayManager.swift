@@ -17,7 +17,7 @@ final class SubtitleOverlayManager {
     private(set) var isDragging = false
 
     /// Window level for subtitle overlay (above most windows but below system UI)
-    private static let subtitleWindowLevel = NSWindow.Level(rawValue: Int(NSWindow.Level.screenSaver.rawValue) - 1)
+    private static let subtitleWindowLevel = NSWindow.Level(rawValue: Int(NSWindow.Level.floating.rawValue) + 1)
 
     private init() {}
 
@@ -35,6 +35,8 @@ final class SubtitleOverlayManager {
     func show(appState: AppState, on screen: NSScreen? = nil) {
         self.appState = appState
 
+        let targetScreen = screen ?? overlayWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+
         // Hide existing window if any (without animation to avoid delays)
         if let existingWindow = overlayWindow {
             removeWindowMoveObserver()
@@ -42,8 +44,6 @@ final class SubtitleOverlayManager {
             overlayWindow = nil
         }
 
-        // Always use the main screen (where menu bar is displayed)
-        let targetScreen = NSScreen.main ?? NSScreen.screens.first
         guard let targetScreen = targetScreen else { return }
 
         // Store current screen frame for position validation
@@ -64,7 +64,7 @@ final class SubtitleOverlayManager {
             var y = appState.subtitleCustomY
 
             // Ensure the window is within screen bounds
-            let fullScreenFrame = targetScreen.frame
+            let fullScreenFrame = targetScreen.visibleFrame
             x = max(fullScreenFrame.minX, min(x, fullScreenFrame.maxX - windowWidth))
             y = max(fullScreenFrame.minY, min(y, fullScreenFrame.maxY - windowHeight))
 
@@ -94,14 +94,16 @@ final class SubtitleOverlayManager {
 
 
         // Create the overlay window
-        let window = NSWindow(
+        let window = NSPanel(
             contentRect: windowFrame,
-            styleMask: .borderless,
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
         // Configure window properties
+        window.identifier = NSUserInterfaceItemIdentifier("subtitle")
+        window.hidesOnDeactivate = false
         window.isOpaque = false
         window.backgroundColor = .clear
         window.level = Self.subtitleWindowLevel
@@ -109,7 +111,7 @@ final class SubtitleOverlayManager {
         window.isMovableByWindowBackground = false // Explicit handle in SubtitleOverlayView.
         window.hasShadow = false
         // Remove .stationary to allow free movement
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = ToolWindowPolicy.currentSpace
         window.isReleasedWhenClosed = false
 
         // Set up SwiftUI content view
@@ -117,6 +119,7 @@ final class SubtitleOverlayManager {
             .environment(appState)
 
         window.contentView = NSHostingView(rootView: contentView)
+        WindowPlacement.fit(window)
         window.orderFrontRegardless()
 
         self.overlayWindow = window

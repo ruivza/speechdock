@@ -121,11 +121,11 @@
 
 /* Translation - Language Pack Alerts */
 "Language Pack Required" = "Sprachpaket erforderlich";
-"The %@ language pack needs to be downloaded.\n\nPlease go to:\nSystem Settings → General → Language & Region → Translation Languages\n\nThen download \"%@\" and try again." = "Das Sprachpaket für %@ muss heruntergeladen werden.\n\nBitte gehen Sie zu:\nSystemeinstellungen → Allgemein → Sprache & Region → Übersetzungssprachen\n\nLaden Sie dann „%@" herunter und versuchen Sie es erneut.";
+"The %@ language pack needs to be downloaded.\n\nPlease go to:\nSystem Settings → General → Language & Region → Translation Languages\n\nThen download \"%@\" and try again." = "Das Sprachpaket für %@ muss heruntergeladen werden.\n\nBitte gehen Sie zu:\nSystemeinstellungen → Allgemein → Sprache & Region → Übersetzungssprachen\n\nLaden Sie dann „%@“ herunter und versuchen Sie es erneut.";
 "Open System Settings" = "Systemeinstellungen öffnen";
 
 "Download Translation Languages" = "Übersetzungssprachen laden";
-"To download language packs for offline translation:\n\n1. Open System Settings\n2. Go to General → Language & Region\n3. Scroll down to \"Translation Languages\"\n4. Download the languages you need\n\nAfter downloading, click \"Refresh Status\" to update the list." = "So laden Sie Sprachpakete für die Offline-Übersetzung herunter:\n\n1. Systemeinstellungen öffnen\n2. Allgemein → Sprache & Region aufrufen\n3. Zu „Übersetzungssprachen" scrollen\n4. Gewünschte Sprachen herunterladen\n\nKlicken Sie nach dem Download auf „Status aktualisieren", um die Liste zu aktualisieren.";
+"To download language packs for offline translation:\n\n1. Open System Settings\n2. Go to General → Language & Region\n3. Scroll down to \"Translation Languages\"\n4. Download the languages you need\n\nAfter downloading, click \"Refresh Status\" to update the list." = "So laden Sie Sprachpakete für die Offline-Übersetzung herunter:\n\n1. Systemeinstellungen öffnen\n2. Allgemein → Sprache & Region aufrufen\n3. Zu „Übersetzungssprachen“ scrollen\n4. Gewünschte Sprachen herunterladen\n\nKlicken Sie nach dem Download auf „Status aktualisieren“, um die Liste zu aktualisieren.";
 
 /* ===== Settings Window ===== */
 "General" = "Allgemein";
@@ -152,8 +152,8 @@
 /* Settings - General - STT */
 "STT Provider" = "STT-Anbieter";
 "TTS Provider" = "TTS-Anbieter";
-"Set API keys in the API Keys tab to enable more providers" = "Legen Sie API-Schlüssel im Tab „API-Schlüssel" fest, um weitere Anbieter freizuschalten";
-"Set API keys in the API Keys section to enable more providers" = "Legen Sie API-Schlüssel im Bereich „API-Schlüssel" fest, um weitere Anbieter freizuschalten";
+"Set API keys in the API Keys tab to enable more providers" = "Legen Sie API-Schlüssel im Tab „API-Schlüssel“ fest, um weitere Anbieter freizuschalten";
+"Set API keys in the API Keys section to enable more providers" = "Legen Sie API-Schlüssel im Bereich „API-Schlüssel“ fest, um weitere Anbieter freizuschalten";
 
 /* Settings - STT Provider Descriptions */
 "Apple Speech (offline, realtime, no time limit)" = "Apple Speech (offline, Echtzeit, ohne Zeitlimit)";
@@ -190,7 +190,7 @@
 "Audio Source" = "Audioquelle";
 
 /* Settings - General - STT Language Help */
-"Auto uses system locale. Select a specific language for better accuracy." = "„Automatisch" verwendet die Systemsprache. Wählen Sie eine bestimmte Sprache für bessere Genauigkeit.";
+"Auto uses system locale. Select a specific language for better accuracy." = "„Automatisch“ verwendet die Systemsprache. Wählen Sie eine bestimmte Sprache für bessere Genauigkeit.";
 "Auto detects the language. Specifying a language can improve accuracy." = "Erkennt die Sprache automatisch. Die Angabe einer Sprache kann die Genauigkeit verbessern.";
 "Auto detects the language. Note: Portuguese is not supported." = "Erkennt die Sprache automatisch. Hinweis: Portugiesisch wird nicht unterstützt.";
 "Auto detects the language (100+ languages supported)." = "Erkennt die Sprache automatisch (über 100 Sprachen unterstützt).";
@@ -381,7 +381,7 @@
 "For window thumbnails in target selection" = "Für Fensterminiaturen bei der Zielauswahl";
 "Accessibility" = "Bedienungshilfen";
 "Screen Recording" = "Bildschirmaufnahme";
-"Click \"Open Settings & Quit\" to open System Settings. SpeechDock will quit so you can grant permissions without interruption. After granting them, relaunch SpeechDock." = "Klicken Sie auf „Einstellungen öffnen & Beenden", um die Systemeinstellungen zu öffnen. SpeechDock wird beendet, damit Sie die Berechtigungen ungestört erteilen können. Starten Sie SpeechDock anschließend neu.";
+"Click \"Open Settings & Quit\" to open System Settings. SpeechDock will quit so you can grant permissions without interruption. After granting them, relaunch SpeechDock." = "Klicken Sie auf „Einstellungen öffnen & Beenden“, um die Systemeinstellungen zu öffnen. SpeechDock wird beendet, damit Sie die Berechtigungen ungestört erteilen können. Starten Sie SpeechDock anschließend neu.";
 "Open Settings & Quit" = "Einstellungen öffnen & Beenden";
 "Later" = "Später";
 
@@ -397,8 +397,8 @@
 
 /* ===== FloatingWindowManager ===== */
 "Paste Destination Unavailable" = "Einfügeziel nicht verfügbar";
-"The application \"%@\" has been terminated. Please select another destination." = "Die App „%@" wurde beendet. Bitte wählen Sie ein anderes Ziel.";
-"The window \"%@\" has been closed. Please select another destination." = "Das Fenster „%@" wurde geschlossen. Bitte wählen Sie ein anderes Ziel.";
+"The application \"%@\" has been terminated. Please select another destination." = "Die App „%@“ wurde beendet. Bitte wählen Sie ein anderes Ziel.";
+"The window \"%@\" has been closed. Please select another destination." = "Das Fenster „%@“ wurde geschlossen. Bitte wählen Sie ein anderes Ziel.";
 
 /* ===== Spell Check ===== */
 "✓ No spelling errors" = "✓ Keine Rechtschreibfehler";
@@ -407,7 +407,7 @@
 "No spelling errors found." = "Keine Rechtschreibfehler gefunden.";
 "Spell Check" = "Rechtschreibprüfung";
 "Clear Text" = "Text löschen";
-"Press Original to edit" = "Zum Bearbeiten „Original" drücken";
+"Press Original to edit" = "Zum Bearbeiten „Original“ drücken";
 
 /* ===== Tool Tips ===== */
 "Decrease Font Size (%@)" = "Schrift verkleinern (%@)";
@@ -458,7 +458,7 @@
 /* ===== Target App Unavailable ===== */
 "The target application" = "Die Ziel-App";
 "Target App Unavailable" = "Ziel-App nicht verfügbar";
-"'%@' is no longer running. The transcribed text has been saved to your clipboard. You can paste it manually with ⌘V." = "„%@" wird nicht mehr ausgeführt. Der transkribierte Text wurde in die Zwischenablage kopiert. Sie können ihn manuell mit ⌘V einsetzen.";
+"'%@' is no longer running. The transcribed text has been saved to your clipboard. You can paste it manually with ⌘V." = "„%@“ wird nicht mehr ausgeführt. Der transkribierte Text wurde in die Zwischenablage kopiert. Sie können ihn manuell mit ⌘V einsetzen.";
 "Paste Failed" = "Einsetzen fehlgeschlagen";
 "Could not paste the text automatically. The transcribed text has been saved to your clipboard. You can paste it manually with ⌘V." = "Der Text konnte nicht automatisch eingesetzt werden. Der transkribierte Text wurde in die Zwischenablage kopiert. Sie können ihn manuell mit ⌘V einsetzen.";
 "• Drop a text file (.txt, .md)" = "• Textdatei ablegen (.txt, .md)";
@@ -480,3 +480,50 @@
 "── Enhanced ──" = "── Erweitert ──";
 "── Standard ──" = "── Standard ──";
 "N/A" = "N/A";
+
+/* Interface and permission guidance */
+"API key not set" = "API-Schlüssel fehlt";
+"Accessibility access is needed to insert text into another app. You can still copy and paste manually." = "Zum Einfügen in andere Apps ist die Berechtigung für Bedienungshilfen nötig. Manuelles Kopieren und Einfügen ist weiterhin möglich.";
+"Accessibility is used to capture selected text" = "Bedienungshilfen werden zum Erfassen ausgewählten Textes verwendet";
+"Allow" = "Erlauben";
+"Allow only the features you need. Text to speech works without microphone access." = "Erlauben Sie nur benötigte Funktionen. Vorlesen funktioniert ohne Mikrofonzugriff.";
+"Also used by: %@" = "Auch verwendet von: %@";
+"Click or %@ to dictate; drag to move" = "Klicken oder %@ zum Diktieren; ziehen zum Verschieben";
+"Click to dictate; drag to move" = "Klicken zum Diktieren; ziehen zum Verschieben";
+"Continue" = "Weiter";
+"Copied to Clipboard" = "In die Zwischenablage kopiert";
+"Could Not Import Text" = "Text konnte nicht importiert werden";
+"Denied" = "Verweigert";
+"Downloading language model: %d%%" = "Sprachmodell wird geladen: %d%%";
+"Drag to move window" = "Ziehen, um das Fenster zu verschieben";
+"For OCR, system/app audio capture and window thumbnails" = "Für OCR, System-/App-Audio und Fenstervorschauen";
+"For inserting text into other apps" = "Zum Einfügen von Text in andere Apps";
+"Granted" = "Erlaubt";
+"If Screen Recording is enabled in System Settings but still unavailable here, restart SpeechDock." = "Wenn die Bildschirmaufnahme in den Systemeinstellungen erlaubt, hier aber nicht verfügbar ist, starten Sie SpeechDock neu.";
+"Language not supported" = "Sprache nicht unterstützt";
+"Maximum %d MB · Duration: %@" = "Maximal %d MB · Dauer: %@";
+"Maximum 100 MB · No duration limit" = "Maximal 100 MB · Keine Zeitbegrenzung";
+"Microphone access is needed to record speech. You can still use text to speech without it." = "Für Sprachaufnahmen ist Mikrofonzugriff nötig. Vorlesen ist auch ohne diese Berechtigung möglich.";
+"No speech could be recognized." = "Es wurde keine Sprache erkannt.";
+"Not granted" = "Nicht erlaubt";
+"Not requested" = "Noch nicht angefragt";
+"Paste could not be verified. You can paste the copied text manually." = "Das Einfügen konnte nicht bestätigt werden. Sie können den kopierten Text manuell einfügen.";
+"Permissions..." = "Berechtigungen …";
+"Preparing speech recognition..." = "Spracherkennung wird vorbereitet …";
+"Recording %@ — click or %@ to stop" = "Aufnahme %@ — klicken oder %@ zum Stoppen";
+"Restricted" = "Eingeschränkt";
+"Screen Recording access is needed to capture system or app audio." = "Zum Erfassen von System- oder App-Audio ist die Berechtigung zur Bildschirmaufnahme nötig.";
+"Screen Recording access is needed to capture text with OCR." = "Zum Erfassen von Text per OCR ist die Berechtigung zur Bildschirmaufnahme nötig.";
+"Select the language you will speak. macOS recognition uses this language." = "Wählen Sie die gesprochene Sprache. Die macOS-Spracherkennung verwendet diese Sprache.";
+"Shortcut conflicts" = "Tastenkürzelkonflikte";
+"Shortcut could not be registered (error %d). Choose another combination." = "Tastenkürzel konnte nicht registriert werden (Fehler %d). Wählen Sie eine andere Kombination.";
+"SpeechDock Settings" = "SpeechDock-Einstellungen";
+"Supported text files: %@" = "Unterstützte Textdateien: %@";
+"The file could not be read as text. Save plain text as UTF-8, or use a valid RTF file." = "Die Datei konnte nicht als Text gelesen werden. Speichern Sie Klartext als UTF-8 oder verwenden Sie eine gültige RTF-Datei.";
+"Close subtitles" = "Untertitel schließen";
+"Stopped" = "Gestoppt";
+"%@ to stop" = "%@ zum Stoppen";
+"No limit" = "Unbegrenzt";
+"~10 min" = "ca. 10 Min.";
+"~2 hours" = "ca. 2 Stunden";
+"On-device speech recognition (macOS 26+)" = "Spracherkennung auf dem Gerät (macOS 26+)";

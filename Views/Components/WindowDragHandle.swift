@@ -8,7 +8,13 @@ struct WindowDragHandle: NSViewRepresentable {
     var color: NSColor = .secondaryLabelColor
 
     func makeNSView(context: Context) -> WindowDragHandleView {
-        WindowDragHandleView()
+        let view = WindowDragHandleView()
+        let label = NSLocalizedString("Drag to move window", comment: "Window drag handle")
+        view.toolTip = label
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.handle)
+        view.setAccessibilityLabel(label)
+        return view
     }
 
     func updateNSView(_ view: WindowDragHandleView, context: Context) {

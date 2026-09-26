@@ -44,7 +44,7 @@ struct ButtonLabelWithShortcut: View {
                 Image(systemName: icon)
                     .font(.body)
             }
-            Text(title)
+            Text(NSLocalizedString(title, comment: "Panel action"))
                 .font(.body)
             if !shortcut.isEmpty {
                 Text(shortcut)
@@ -68,7 +68,7 @@ struct CompactButtonLabel: View {
                 Image(systemName: icon)
                     .font(.system(size: 10))
             }
-            Text(title)
+            Text(NSLocalizedString(title, comment: "Panel action"))
                 .font(.system(size: 11, weight: .medium))
             if !shortcut.isEmpty {
                 Text("(\(shortcut))")
@@ -233,7 +233,7 @@ struct WindowSelectorDropdown: View {
                         // No window selected - show placeholder
                         Image(systemName: "macwindow")
                             .font(.system(size: 48))
-                            .foregroundColor(.secondary.opacity(0.5))
+                            .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, maxHeight: 180)
                         Text("No Preview")
                             .font(.callout)
@@ -629,20 +629,11 @@ struct TranscriptionFloatingView: View {
     private var isFloatingStyle: Bool { appState.panelStyle == .floating }
     private var panelCornerRadius: CGFloat { isFloatingStyle ? 12 : 0 }
 
+    @State private var translationExpanded = false
+
     @ViewBuilder
     private var panelBackground: some View {
-        if isFloatingStyle {
-            ZStack {
-                VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
-                Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-                    appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                        ? NSColor(white: 0.18, alpha: 0.85)
-                        : NSColor(white: 0.96, alpha: 0.85)
-                }))
-            }
-        } else {
-            Color(NSColor.windowBackgroundColor)
-        }
+        PanelSurface(opaque: !isFloatingStyle)
     }
 
     /// Border overlay for text area
@@ -658,14 +649,15 @@ struct TranscriptionFloatingView: View {
     /// Placeholder overlay when text area is empty
     @ViewBuilder
     private var placeholderOverlay: some View {
-        if editedText.isEmpty {
+        // Hidden while a file is dragged over, so the drop prompt is not drawn on top of it.
+        if editedText.isEmpty && !(isDragOver && !isBusy) {
             if isRecording {
                 // Recording state placeholders
                 if appState.transcriptionState == .preparing {
                     VStack {
                         ProgressView()
                             .scaleEffect(0.8)
-                        Text("Starting...")
+                        Text(appState.recordingPreparationMessage ?? NSLocalizedString("Starting...", comment: "STT preparation"))
                             .foregroundColor(.secondary)
                             .font(.callout)
                     }
@@ -705,18 +697,18 @@ struct TranscriptionFloatingView: View {
                                 Text("Or drop an audio file here")
                                     .font(.caption)
                             }
-                            .foregroundColor(.secondary.opacity(0.7))
+                            .foregroundStyle(.secondary)
 
                             // Provider-specific limits
-                            Text("\(provider.supportedAudioFormats) (max \(provider.maxFileSizeMB)MB, \(provider.maxAudioDuration))")
+                            Text(AudioFileSupport.formatHint + "\n" + AudioFileSupport.limits(for: provider))
                                 .font(.caption2)
-                                .foregroundColor(.secondary.opacity(0.5))
+                                .foregroundStyle(.secondary)
                         }
                     } else {
                         // Show hint about switching provider for file transcription
                         Text("Switch to OpenAI, Gemini, or ElevenLabs for file transcription")
                             .font(.caption2)
-                            .foregroundColor(.secondary.opacity(0.5))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -747,7 +739,7 @@ struct TranscriptionFloatingView: View {
                         .scaleEffect(1.2)
                     Text("Transcribing file...")
                         .font(.callout)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.secondary)
                     Button("Cancel") {
                         appState.cancelFileTranscription()
                     }
@@ -805,12 +797,11 @@ struct TranscriptionFloatingView: View {
                     }
 
                     // Check if it's an audio file
-                    let audioExtensions = ["mp3", "wav", "m4a", "aac", "webm", "ogg", "flac", "mp4"]
+                    let audioExtensions = AudioFileSupport.extensions
                     let ext = url.pathExtension.lowercased()
                     guard audioExtensions.contains(ext) else {
                         Task { @MainActor in
-                            let provider = appState.selectedRealtimeProvider
-                            let formats = provider.supportsFileTranscription ? provider.supportedAudioFormats : "MP3, WAV, M4A, AAC, WebM, OGG, FLAC"
+                            let formats = AudioFileSupport.formatHint
                             showDropNotice(String(format: NSLocalizedString("Unsupported file format: .%@\n\nSupported formats: %@", comment: "File transcription error"), ext, formats))
                         }
                         return
@@ -835,9 +826,9 @@ struct TranscriptionFloatingView: View {
         alert.alertStyle = .informational
         alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
 
-        alert.window.level = .floating + 1
+        // Presented as a sheet on the active window.
 
-        alert.runModal()
+        WindowPresentation.alert(alert)
     }
 
     /// Floating action buttons inside text area (Font size, Spell Check, Clear)
@@ -926,6 +917,7 @@ struct TranscriptionFloatingView: View {
     private var translationControlsView: some View {
         // Don't show translation controls when recording or transcribing
         if !isBusy {
+            DisclosureGroup("Translation", isExpanded: $translationExpanded) {
             TranslationControls(
                 appState: appState,
                 text: displayTextForTranslation,
@@ -933,7 +925,8 @@ struct TranscriptionFloatingView: View {
                     editedText = translatedText
                 }
             )
-            .padding(8)
+            }
+            .padding(.vertical, 4)
         }
     }
 
@@ -964,14 +957,13 @@ struct TranscriptionFloatingView: View {
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .focusEffectDisabled()
                     .applyCustomShortcut(cancelShortcut)
                     .keyboardShortcut("w", modifiers: .command)
                     .help("Close (⌘W)")
                 }
 
                 statusIcon
-                Text(headerText)
+                Text(NSLocalizedString(headerText, comment: "Panel status"))
                     .font(.headline)
                     .lineLimit(1)
                     .fixedSize()
@@ -1023,7 +1015,10 @@ struct TranscriptionFloatingView: View {
             // Text area with replacement highlighting
             // Disable editing during recording/file transcription, translating, or showing translated text
             ScrollableTextView(
-                    text: $editedText,
+                    text: Binding(get: { editedText }, set: { value in
+                        editedText = value
+                        if !isBusy && !appState.translationState.isTranslated { appState.currentTranscription = value }
+                    }),
                     isEditable: !isBusy && !appState.translationState.isTranslating && !appState.translationState.isTranslated,
                     highlightRange: nil,
                     enableHighlight: false,
@@ -1048,10 +1043,7 @@ struct TranscriptionFloatingView: View {
                         }
                     }
                 )
-                .overlay(alignment: .bottomLeading) {
-                    // Translation controls (left side)
-                    translationControlsView
-                }
+
                 .overlay(alignment: .bottomTrailing) {
                     // Floating action buttons (Clear, Spell Check)
                     textAreaFloatingButtons
@@ -1068,6 +1060,13 @@ struct TranscriptionFloatingView: View {
                         .font(.callout)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+            if let message = appState.recordingPreparationMessage {
+                HStack { ProgressView().controlSize(.small); Text(message) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+            }
+            translationControlsView
 
             // Action buttons
             actionButtons
@@ -1366,6 +1365,9 @@ struct TranscriptionFloatingView: View {
                     }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                 }
+            } else if appState.transcriptionState == .preparing {
+                Button("Cancel") { appState.stopRecording() }
+                    .keyboardShortcut(.escape, modifiers: [])
             } else if isTranscribingFile {
                 // File transcription in progress: Cancel button only
                 Button {
@@ -1437,7 +1439,7 @@ struct TranscriptionFloatingView: View {
         // Activate app and bring panel to front
         NSApp.activate(ignoringOtherApps: true)
 
-        savePanel.begin { response in
+        WindowPresentation.panel(savePanel) { response in
             if response == .OK, let url = savePanel.url {
                 do {
                     try editedText.write(to: url, atomically: true, encoding: .utf8)
@@ -1450,9 +1452,9 @@ struct TranscriptionFloatingView: View {
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
 
-                    alert.window.level = .floating + 1
+                    // Presented as a sheet on the active window.
 
-                    alert.runModal()
+                    WindowPresentation.alert(alert)
                 }
             }
         }
@@ -1553,6 +1555,7 @@ struct AudioInputSourceSelector: View {
 
             // System Audio option (requires Screen Recording permission)
             Button(action: {
+                guard PermissionService.shared.ensureAccess(for: .systemAudioRecording) else { return }
                 appState.selectedAudioInputSourceType = .systemAudio
             }) {
                 Label("System Audio", systemImage: AudioInputSourceType.systemAudio.icon)
@@ -1560,7 +1563,6 @@ struct AudioInputSourceSelector: View {
                     Image(systemName: "checkmark")
                 }
             }
-            .disabled(!appState.hasScreenRecordingPermission)
 
             Divider()
 
@@ -1604,9 +1606,11 @@ struct AudioInputSourceSelector: View {
                     Label("App Audio", systemImage: AudioInputSourceType.applicationAudio.icon)
                 }
             } else {
-                // Show disabled App Audio label when Screen Recording permission is missing
-                Label("App Audio", systemImage: AudioInputSourceType.applicationAudio.icon)
-                    .foregroundColor(.secondary)
+                Button {
+                    PermissionService.shared.ensureAccess(for: .systemAudioRecording)
+                } label: {
+                    Label("App Audio", systemImage: AudioInputSourceType.applicationAudio.icon)
+                }
 
                 Text("Screen Recording permission required")
                     .font(.caption2)

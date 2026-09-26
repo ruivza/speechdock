@@ -85,11 +85,18 @@ struct TTSModelPicker: View {
     @State private var availableModels: [TTSModelInfo] = []
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
         Picker("Model", selection: $appState.selectedTTSModel) {
             ForEach(availableModels) { model in
-                Text(modelDisplayName(model))
+                Text(model.name).help(model.description)
                     .tag(model.id)
             }
+        }
+        .help(availableModels.first { $0.id == appState.selectedTTSModel }.map { "\($0.name): \($0.description)" } ?? "")
+        if let model = availableModels.first(where: { $0.id == appState.selectedTTSModel }), !model.description.isEmpty {
+            Text(model.description).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         }
         .onAppear {
             loadModels()
@@ -112,13 +119,7 @@ struct TTSModelPicker: View {
         }
     }
 
-    private func modelDisplayName(_ model: TTSModelInfo) -> String {
-        if model.description.isEmpty {
-            return model.name
-        } else {
-            return "\(model.name) - \(model.description)"
-        }
-    }
+
 }
 
 /// Voice picker for TTS provider

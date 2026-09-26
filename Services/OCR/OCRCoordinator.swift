@@ -122,7 +122,7 @@ final class OCRCoordinator: ObservableObject {
             dprint("OCRCoordinator: Capturing region...")
 
 
-            let image = try ScreenCaptureService.capture(rect: rect)
+            let image = try await ScreenCaptureService.capture(rect: rect)
 
             // Step 2: Perform OCR
             dprint("OCRCoordinator: Performing OCR...")

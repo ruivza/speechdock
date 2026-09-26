@@ -32,7 +32,7 @@ enum FloatingMicConstants {
 }
 
 /// A window that doesn't take focus when clicked
-private class NonActivatingWindow: NSWindow {
+private class NonActivatingWindow: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
@@ -141,24 +141,27 @@ final class FloatingMicButtonManager {
 
         let window = NonActivatingWindow(
             contentRect: frame,
-            styleMask: .borderless,
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
+        window.identifier = NSUserInterfaceItemIdentifier("quickMic")
+        window.hidesOnDeactivate = false
         window.isOpaque = false
         window.backgroundColor = .clear
         window.level = WindowLevelCoordinator.shared.nextPanelLevel()
         window.ignoresMouseEvents = false
         window.isMovableByWindowBackground = false  // We handle drag manually
         window.hasShadow = false  // Shadow is on the view itself
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        window.collectionBehavior = ToolWindowPolicy.currentSpace
         window.isReleasedWhenClosed = false
 
         let contentView = FloatingMicButtonView(appState: appState, manager: self)
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.layer?.backgroundColor = .clear
         window.contentView = hostingView
+        WindowPlacement.fit(window)
         window.orderFrontRegardless()
 
         self.buttonWindow = window
@@ -168,7 +171,7 @@ final class FloatingMicButtonManager {
     func hide() {
         // Stop any active quick-mode recording before hiding the button,
         // so recording doesn't continue invisibly
-        if appState?.isRecording == true {
+        if appState?.isRecording == true || appState?.transcriptionState == .preparing {
             stopRecording()
         }
 
@@ -243,7 +246,7 @@ final class FloatingMicButtonManager {
             logger.error("startRecording: appState is nil")
             return
         }
-        guard !appState.isRecording else {
+        guard !appState.isRecording && appState.transcriptionState != .preparing else {
             logger.debug("startRecording: already recording, skipping")
             return
         }
@@ -292,7 +295,13 @@ final class FloatingMicButtonManager {
 
     private func beginFinishingRecording() -> Task<String, Never>? {
         if let task = finishRecordingTask { return task }
-        guard let appState, appState.isRecording else { return nil }
+        guard let appState else { return nil }
+        if appState.transcriptionState == .preparing {
+            appState.stopRecording()
+            FloatingMicTextHUD.shared.hide()
+            return nil
+        }
+        guard appState.isRecording else { return nil }
         let service = appState.realtimeSTTService
         let initialText = appState.currentTranscription
         appState.isRecording = false
@@ -330,6 +339,11 @@ final class FloatingMicButtonManager {
     }
 
     func toggleRecording() {
+        if appState?.transcriptionState == .preparing {
+            appState?.cancelRecording()
+            FloatingMicTextHUD.shared.hide()
+            return
+        }
         guard let appState = appState else { return }
         if appState.isRecording {
             stopRecording()
@@ -414,7 +428,7 @@ final class FloatingMicButtonManager {
                         } else {
                             // Paste failed — keep text on clipboard for manual paste
                             logger.warning("Paste failed, text preserved on clipboard")
-                            self.showPasteFailedAlert()
+
                         }
                         FloatingMicTextHUD.shared.hide()
                     }
@@ -434,7 +448,7 @@ final class FloatingMicButtonManager {
                         logger.debug("Text insertion completed, clipboard restored")
                     } else {
                         logger.warning("Paste failed, text preserved on clipboard")
-                        self.showPasteFailedAlert()
+
                     }
                     FloatingMicTextHUD.shared.hide()
                 }
@@ -452,16 +466,7 @@ final class FloatingMicButtonManager {
         )
         alert.alertStyle = .informational
         alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
-        alert.runModal()
-    }
-
-    private func showPasteFailedAlert() {
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString("Paste Failed", comment: "Alert title when paste fails")
-        alert.informativeText = NSLocalizedString("Could not paste the text automatically. The transcribed text has been saved to your clipboard. You can paste it manually with ⌘V.", comment: "Alert message when paste fails")
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
-        alert.runModal()
+        WindowPresentation.alert(alert)
     }
 
     // MARK: - Quick STT (without panel)
@@ -484,7 +489,7 @@ final class FloatingMicButtonManager {
         appState.transcriptionState = .preparing
 
         Task {
-            await appState.startRealtimeSTTForQuickMode(delegate: self)
+            let started = await appState.startRealtimeSTTForQuickMode(delegate: self)
 
             await MainActor.run {
                 // If startRealtimeSTTForQuickMode failed it sets transcriptionState to .error;
@@ -500,18 +505,11 @@ final class FloatingMicButtonManager {
                     }
                     return
                 }
+                guard started, appState.transcriptionState == .preparing else { return }
                 appState.isRecording = true
                 appState.transcriptionState = .recording
 
-                // Start duration timer
-                appState.recordingDuration = 0
-                appState.recordingStartTime = Date()
-                appState.durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak appState] _ in
-                    Task { @MainActor in
-                        guard let appState = appState, let startTime = appState.recordingStartTime else { return }
-                        appState.recordingDuration = Date().timeIntervalSince(startTime)
-                    }
-                }
+                appState.startDurationTimer()
             }
         }
     }
@@ -834,6 +832,10 @@ extension FloatingMicButtonManager: RealtimeSTTDelegate {
         let frame = buttonWindow?.frame
         stopRecording()
         if let frame { FloatingMicTextHUD.shared.showError(error.localizedDescription, near: frame) }
+    }
+
+    func realtimeSTT(_ service: RealtimeSTTService, didUpdatePreparation message: String?) {
+        appState?.recordingPreparationMessage = message
     }
 
     func realtimeSTT(_ service: RealtimeSTTService, didChangeListeningState isListening: Bool) {

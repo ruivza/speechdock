@@ -5,6 +5,10 @@ struct FloatingMicButtonView: View {
     @Bindable var appState: AppState
     let manager: FloatingMicButtonManager
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @AppStorage("quickMicMovementHintSeen") private var hintSeen = false
+    @State private var showHint = false
     @State private var isHovering = false
     @State private var pulseAnimation = false
     @State private var isDragging = false
@@ -15,7 +19,7 @@ struct FloatingMicButtonView: View {
         ZStack {
             // Main button circle with blur background
             Circle()
-                .fill(.ultraThinMaterial)
+                .fill(reduceTransparency ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial))
                 .frame(width: buttonSize, height: buttonSize)
 
             // Button content
@@ -31,7 +35,7 @@ struct FloatingMicButtonView: View {
                     .frame(width: buttonSize - 4, height: buttonSize - 4)
 
                 // Recording pulse animation
-                if appState.isRecording {
+                if appState.isRecording && !reduceMotion {
                     Circle()
                         .stroke(Color.red.opacity(0.5), lineWidth: 2)
                         .frame(width: buttonSize - 4, height: buttonSize - 4)
@@ -75,13 +79,13 @@ struct FloatingMicButtonView: View {
                 }
         )
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                 isHovering = hovering
             }
         }
         .onChange(of: appState.isRecording) { _, isRecording in
             if isRecording {
-                pulseAnimation = true
+                pulseAnimation = !reduceMotion
             } else {
                 pulseAnimation = false
             }
@@ -90,6 +94,22 @@ struct FloatingMicButtonView: View {
             contextMenuContent
         }
         .help(tooltipText)
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text("Quick Transcription"))
+        .accessibilityValue(Text(appState.transcriptionState == .preparing ? "Preparing speech recognition..." : (appState.isRecording ? "Recording..." : "Stopped")))
+        .accessibilityHint(Text("Click to dictate; drag to move"))
+        .accessibilityAction { manager.toggleRecording() }
+        .onChange(of: reduceMotion) { _, reduced in pulseAnimation = !reduced && appState.isRecording }
+        .onAppear {
+            if !hintSeen { showHint = true; hintSeen = true }
+        }
+        .popover(isPresented: $showHint) {
+            VStack(spacing: 12) {
+                Text("Click to dictate; drag to move")
+                Button("OK") { showHint = false }
+            }.padding()
+        }
     }
 
     // MARK: - Computed Properties
@@ -145,9 +165,9 @@ struct FloatingMicButtonView: View {
     private var tooltipText: String {
         if appState.isRecording {
             let duration = formatDuration(appState.recordingDuration)
-            return "Recording \(duration) - Click or \(shortcutString) to stop"
+            return String(format: NSLocalizedString("Recording %@ — click or %@ to stop", comment: "Quick mic help"), duration, shortcutString)
         } else {
-            return "Click or \(shortcutString) to start dictation"
+            return String(format: NSLocalizedString("Click or %@ to dictate; drag to move", comment: "Quick mic help"), shortcutString)
         }
     }
 

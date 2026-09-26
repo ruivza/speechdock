@@ -92,7 +92,7 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuBarActionButtonStyle())
-            .disabled(appState.isProcessing || !appState.hasMicrophonePermission)
+            .disabled(appState.isProcessing)
 
             // Subtitle mode toggle
             Button(action: {
@@ -120,7 +120,6 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuBarActionButtonStyle())
-            .disabled(!appState.hasMicrophonePermission)
 
             // Floating mic button toggle
             Button(action: {
@@ -148,7 +147,6 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuBarActionButtonStyle())
-            .disabled(!appState.hasMicrophonePermission)
 
             // Transcribe Audio File button
             Button(action: {
@@ -194,7 +192,7 @@ struct MenuBarView: View {
             if !appState.hasAccessibilityPermission {
                 permissionWarning(
                     icon: "hand.raised.slash",
-                    text: "Accessibility access required",
+                    text: "Accessibility is used to capture selected text",
                     action: openAccessibilitySettings
                 )
             }
@@ -218,18 +216,18 @@ struct MenuBarView: View {
             }) {
                 HStack {
                     Image(systemName: "speaker.wave.2")
-                        .foregroundColor(appState.hasAccessibilityPermission ? .accentColor : .secondary)
+                        .foregroundColor(.accentColor)
                         .frame(width: 20)
                     Text("Text to Speech")
                         .font(.callout)
-                        .foregroundColor(appState.hasAccessibilityPermission ? .primary : .secondary)
+                        .foregroundColor(.primary)
                     Spacer()
                     shortcutBadge(appState.hotKeyService?.ttsKeyCombo.displayString ?? "\u{2303}\u{2325}T")
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuBarActionButtonStyle())
-            .disabled(appState.ttsState == .speaking || appState.ttsState == .loading || !appState.hasAccessibilityPermission)
+            .disabled(appState.ttsState == .speaking || appState.ttsState == .loading)
 
             // OCR to TTS Action button with shortcut
             Button(action: {
@@ -250,7 +248,7 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MenuBarActionButtonStyle())
-            .disabled(appState.ocrCoordinator.isSelecting || appState.ocrCoordinator.isProcessing || !appState.hasScreenRecordingPermission)
+            .disabled(appState.ocrCoordinator.isSelecting || appState.ocrCoordinator.isProcessing)
 
             Divider()
                 .padding(.vertical, 4)
@@ -269,6 +267,19 @@ struct MenuBarView: View {
                             .font(.callout)
                         Spacer()
                         shortcutBadge("\u{2318},")
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(MenuBarActionButtonStyle())
+
+                Button {
+                    StatusBarManager.shared.closePanel()
+                    PermissionSetupController.shared.show()
+                } label: {
+                    HStack {
+                        Image(systemName: "lock.shield").foregroundColor(.accentColor).frame(width: 20)
+                        Text("Permissions...").font(.callout)
+                        Spacer()
                     }
                     .contentShape(Rectangle())
                 }

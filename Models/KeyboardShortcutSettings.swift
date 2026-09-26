@@ -213,7 +213,6 @@ enum ShortcutAction: String, CaseIterable, Codable {
     case ttsSpeak = "tts_speak"
     case ttsStop = "tts_stop"
     case ttsSave = "tts_save"
-    case ttsClose = "tts_close"
 
     // Common shortcuts (both panels)
     case fontSizeIncrease = "font_size_increase"
@@ -231,7 +230,6 @@ enum ShortcutAction: String, CaseIterable, Codable {
         case .ttsSpeak: return NSLocalizedString("Speak", comment: "Shortcut action")
         case .ttsStop: return NSLocalizedString("Stop Speaking", comment: "Shortcut action")
         case .ttsSave: return NSLocalizedString("Save Audio", comment: "Shortcut action")
-        case .ttsClose: return NSLocalizedString("Close", comment: "Shortcut action")
         case .fontSizeIncrease: return NSLocalizedString("Increase Font Size", comment: "Shortcut action")
         case .fontSizeDecrease: return NSLocalizedString("Decrease Font Size", comment: "Shortcut action")
         case .fontSizeReset: return NSLocalizedString("Reset Font Size", comment: "Shortcut action")
@@ -242,7 +240,7 @@ enum ShortcutAction: String, CaseIterable, Codable {
         switch self {
         case .sttRecord, .sttStop, .sttPaste, .sttSave, .sttTargetSelect, .sttCancel:
             return "STT Panel"
-        case .ttsSpeak, .ttsStop, .ttsSave, .ttsClose:
+        case .ttsSpeak, .ttsStop, .ttsSave:
             return "TTS Panel"
         case .fontSizeIncrease, .fontSizeDecrease, .fontSizeReset:
             return "Common"
@@ -270,8 +268,6 @@ enum ShortcutAction: String, CaseIterable, Codable {
             return CustomShortcut(keyCode: kVK_ANSI_Period, modifiers: UInt(NSEvent.ModifierFlags.command.rawValue))
         case .ttsSave:
             return CustomShortcut(key: "s", modifiers: .command)
-        case .ttsClose:
-            return CustomShortcut(keyCode: kVK_ANSI_Period, modifiers: UInt(NSEvent.ModifierFlags.command.rawValue))
         case .fontSizeIncrease:
             // ⌘+ (⌘= on US keyboard, ⌘; on JIS keyboard)
             return CustomShortcut(keyCode: kVK_ANSI_Equal, modifiers: UInt(NSEvent.ModifierFlags.command.rawValue))
@@ -301,6 +297,13 @@ final class ShortcutSettingsManager: ObservableObject {
     /// Get shortcut for an action (returns default if not customized)
     func shortcut(for action: ShortcutAction) -> CustomShortcut {
         shortcuts[action] ?? action.defaultShortcut
+    }
+
+    func conflicts(for action: ShortcutAction) -> [ShortcutAction] {
+        ShortcutAction.allCases.filter { other in
+            other != action && (other.category == action.category || other.category == "Common" || action.category == "Common")
+                && shortcut(for: other) == shortcut(for: action)
+        }
     }
 
     /// Set custom shortcut for an action

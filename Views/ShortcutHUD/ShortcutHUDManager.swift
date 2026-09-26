@@ -67,7 +67,7 @@ final class ShortcutHUDManager {
         panel.hasShadow = true
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = ToolWindowPolicy.currentSpace
 
         // Center on main screen
         if let screen = NSScreen.main {

@@ -82,8 +82,9 @@
             <direct-parameter type="text" description="The text to copy."/>
         </command>
 
-        <command name="paste text" code="SDckPsTx" description="Paste the given text into the frontmost application.">
+        <command name="paste text" code="SDckPsTx" description="Copy text and request a paste into the frontmost application. Returns inserted only when the result can be verified; otherwise returns copied to clipboard.">
             <cocoa class="SpeechDock.PasteTextCommand"/>
+            <result type="text" description="inserted or copied to clipboard"/>
             <direct-parameter type="text" description="The text to paste."/>
         </command>
 
@@ -111,20 +112,20 @@
         </command>
 
         <!-- STT Panel Commands -->
-        <command name="show stt panel" code="SDckShST" description="Show the STT (speech-to-text) panel. If auto-start is enabled, recording begins automatically. In floating style, drag the top handle to move the panel.">
+        <command name="show stt panel" code="SDckShST" description="Show the STT (speech-to-text) panel. Opening it stops TTS and, if auto-start is enabled, starts recording. An already open panel keeps its text and recording state. In floating style, drag the top handle to move the panel.">
             <cocoa class="SpeechDock.ShowSTTPanelCommand"/>
         </command>
 
-        <command name="toggle stt panel" code="SDckTgST" description="Toggle the STT panel visibility. If panel is visible and recording, stops recording and closes panel.">
+        <command name="toggle stt panel" code="SDckTgST" description="Close the visible STT panel and stop recording, or open it without recording. Never starts recording.">
             <cocoa class="SpeechDock.ToggleSTTPanelCommand"/>
         </command>
 
         <!-- TTS Panel Commands -->
-        <command name="show tts panel" code="SDckShTT" description="Show the TTS (text-to-speech) panel for manual text input. In floating style, drag the top handle to move the panel.">
+        <command name="show tts panel" code="SDckShTT" description="Show the TTS (text-to-speech) panel for manual text input without speaking. Opening it stops STT; showing an already open panel preserves its text. In floating style, drag the top handle to move the panel.">
             <cocoa class="SpeechDock.ShowTTSPanelCommand"/>
         </command>
 
-        <command name="toggle tts panel" code="SDckTgTT" description="Toggle the TTS panel visibility. If speaking, stops playback and closes panel.">
+        <command name="toggle tts panel" code="SDckTgTT" description="Close the visible TTS panel and stop playback, or open it without speaking. Never starts speaking.">
             <cocoa class="SpeechDock.ToggleTTSPanelCommand"/>
         </command>
 
@@ -135,6 +136,16 @@
 
         <command name="toggle subtitle" code="SDckTgSu" description="Toggle subtitle mode on/off.">
             <cocoa class="SpeechDock.ToggleSubtitleCommand"/>
+        </command>
+
+        <command name="hide stt panel" code="SDckHdST" description="Stop recording and file transcription and close the STT panel if open. Repeated calls have no effect.">
+            <cocoa class="SpeechDock.HideSTTPanelCommand"/>
+        </command>
+        <command name="hide tts panel" code="SDckHdTT" description="Stop speech and audio generation and close the TTS panel if open. Repeated calls have no effect.">
+            <cocoa class="SpeechDock.HideTTSPanelCommand"/>
+        </command>
+        <command name="hide subtitle" code="SDckHdSu" description="Stop subtitle recording and close the subtitle overlay if enabled. Repeated calls have no effect.">
+            <cocoa class="SpeechDock.HideSubtitleCommand"/>
         </command>
 
         <!-- OCR Command -->

@@ -206,6 +206,13 @@ struct SubtitleOverlayView: View {
     @ViewBuilder
     private var headerView: some View {
         HStack(spacing: 12) {
+            Button { appState.hideSubtitleMode() } label: {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .help("Close subtitles")
+            .accessibilityLabel("Close subtitles")
+
             // Recording indicator with stop button (left side)
             if appState.isRecording {
                 HStack(spacing: 6) {
@@ -225,7 +232,7 @@ struct SubtitleOverlayView: View {
 
                     // Stop button
                     Button {
-                        AppState.shared.toggleRecording()
+                        appState.stopRecording()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "stop.fill")
@@ -442,7 +449,7 @@ struct SubtitleLanguageMenu: View {
         .task {
             await loadAvailableLanguages()
         }
-        .onChange(of: appState.translationProvider) { _, _ in
+        .onChange(of: appState.effectiveTranslationProvider) { _, _ in
             Task {
                 await loadAvailableLanguages()
             }
@@ -451,7 +458,7 @@ struct SubtitleLanguageMenu: View {
 
     private func loadAvailableLanguages() async {
         isLoading = true
-        availableLanguages = await appState.translationProvider.availableTranslationLanguages()
+        availableLanguages = await appState.effectiveTranslationProvider.availableTranslationLanguages()
 
         // If current selection is not available, switch to first available
         if !availableLanguages.contains(appState.translationTargetLanguage),
@@ -497,7 +504,7 @@ struct SubtitleProviderMenu: View {
                 } label: {
                     HStack {
                         Text(provider.displayName)
-                        if provider == appState.translationProvider {
+                        if provider == appState.effectiveTranslationProvider {
                             Spacer()
                             Image(systemName: "checkmark")
                         }
@@ -506,9 +513,14 @@ struct SubtitleProviderMenu: View {
                 .disabled(!hasAPIKey(for: provider) && provider.requiresAPIKey)
             }
         } label: {
-            Text(appState.translationProvider.displayName)
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.4))
+            HStack(spacing: 4) {
+                Text(appState.effectiveTranslationProvider.displayName)
+                if let reason = appState.effectiveTranslationSelection.fallbackReason {
+                    Text(reason)
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundColor(.white.opacity(0.6))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()

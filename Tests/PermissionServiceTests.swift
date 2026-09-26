@@ -6,13 +6,6 @@ final class PermissionServiceTests: XCTestCase {
 
     // MARK: - Computed Properties
 
-    func testAllRequiredGrantedDependsOnMicrophone() {
-        let service = PermissionService.shared
-        // allRequiredGranted should equal microphoneGranted
-        XCTAssertEqual(service.allRequiredGranted, service.microphoneGranted,
-            "allRequiredGranted should match microphoneGranted")
-    }
-
     func testAllGrantedRequiresAllThree() {
         let service = PermissionService.shared
         if service.microphoneGranted && service.accessibilityGranted && service.screenRecordingGranted {
@@ -92,9 +85,5 @@ final class PermissionServiceTests: XCTestCase {
             XCTAssertFalse(service.hasAnyMissing)
         }
 
-        // If microphone is granted, allRequiredGranted should be true
-        if service.microphoneGranted {
-            XCTAssertTrue(service.allRequiredGranted)
-        }
     }
 }

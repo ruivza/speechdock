@@ -126,10 +126,12 @@ The button can be dragged anywhere on screen, and its position is saved.
 - Text replacement rules for STT output correction
 - Translation (macOS on-device or cloud LLMs)
 - Transcription history (auto-saved, up to 50 entries, accessible from menu bar)
-- Text file drag & drop for TTS panel (.txt, .md, .text, .rtf)
+- Drop text files onto the TTS panel (.txt, .md, .text, .rtf; up to 1 MB). UTF-8 text or RTF contents are inserted at the drop position and can be undone with Cmd + Z.
 - Real-time character and word count display
 - Automatic WebSocket reconnection with exponential backoff
 - [AppleScript support](docs/applescript.md) for automation
+- Translation controls collapse below the text; file transcription appends to drafts. Settings show shortcut conflicts, and accessibility options preserve readable panels and keyboard focus.
+- AppleScript panel toggles only change visibility. Explicit hide commands stop and close panels; subtitle Stop leaves the overlay visible.
 - Automatic updates via Sparkle
 - Launch at login option
 
@@ -176,17 +178,21 @@ To use cloud providers, you need to configure API keys:
 
 API keys are securely stored in macOS Keychain.
 
+When the saved translation provider cannot be used, the panel and subtitles show and use the same available provider, with a short reason such as “API key not set.” macOS translation hides the cloud model selector. Your saved preference is retained.
+
 ### Permissions
 
-SpeechDock requires or recommends the following permissions:
+Permissions are needed only for the features that use them. Text to speech does not require microphone access.
 
-| Permission | Level | Purpose |
-|------------|-------|---------|
-| **Microphone** | Required | Speech recognition input |
-| **Accessibility** | Recommended | Global keyboard shortcuts and text insertion |
-| **Screen Recording** | Optional | System/App Audio capture, OCR, and window thumbnails |
+| Permission | Used for |
+|------------|----------|
+| **Microphone** | Recording speech from a microphone |
+| **Accessibility** | Capturing selected text and inserting text into other apps |
+| **Screen Recording** | System/App Audio capture, OCR, and window thumbnails |
 
-On first launch, SpeechDock displays a permission setup window with real-time status indicators. Grant permissions in **System Settings** > **Privacy & Security** — the setup window updates automatically without restarting the app. Features that require missing permissions are disabled in the UI with clear visual indicators.
+You can choose **Continue** or **Later** without granting permissions. This choice is remembered, so setup does not reappear at every launch. Use **Permissions...** in the menu bar to review it. When you start a feature that needs missing access, SpeechDock explains what to allow. The setup shows microphone access as not requested, denied, restricted, or granted. Screen Recording and Accessibility show whether access is available; macOS does not expose their denial history. If Screen Recording is enabled in **System Settings > Privacy & Security** but remains unavailable, restart SpeechDock.
+
+SpeechDock stays in the Dock while an STT/TTS panel, Settings, or permission setup is open, and returns to menu-bar-only mode when all of these windows close. Subtitles, the quick mic button, and other helper displays do not keep it in the Dock.
 
 ## Usage
 

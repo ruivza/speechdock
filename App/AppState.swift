@@ -185,6 +185,12 @@ final class AppState {
     var isSavingAudio = false  // Loading state for audio save
 
     // MARK: - Translation State
+    var effectiveTranslationSelection: TranslationSelection {
+        TranslationFactory.selection(for: translationTargetLanguage, preferredProvider: translationProvider,
+                                     savedModel: selectedTranslationModel)
+    }
+    var effectiveTranslationProvider: TranslationProvider { effectiveTranslationSelection.provider }
+
     var translationState: TranslationState = .idle
     var translationProvider: TranslationProvider = .macOS {
         didSet {
@@ -576,6 +582,8 @@ final class AppState {
     private var savePreferencesWorkItem: DispatchWorkItem?  // Debounce coalescing for savePreferences
     private var willTerminateObserver: NSObjectProtocol?  // Flushes pending preference save on quit
     private var ttsService: TTSService?
+    var recordingPreparationMessage: String?
+    private var recordingStartTask: Task<Void, Never>?
     private var fileTranscriptionTask: Task<Void, Never>?
 
     private let persistsPreferences: Bool
@@ -683,6 +691,33 @@ final class AppState {
         }
     }
 
+    func toggleSTTPanelVisibility() {
+        if showFloatingWindow && floatingWindowManager.isActuallyVisible { hideSTTPanel() }
+        else { showSTTPanel(allowAutoStart: false) }
+    }
+
+    func toggleTTSPanelVisibility() {
+        if showTTSWindow && floatingWindowManager.isActuallyVisible { hideTTSPanel() }
+        else { showTTSPanel() }
+    }
+
+    func hideSTTPanel() {
+        guard showFloatingWindow else { return }
+        cancelFileTranscription()
+        cancelRecording()
+    }
+
+    func hideTTSPanel() {
+        guard showTTSWindow else { return }
+        closeTTSWindow()
+    }
+
+    func hideSubtitleMode() {
+        guard subtitleModeEnabled else { return }
+        stopRecording()
+        subtitleModeEnabled = false
+    }
+
     /// Toggle floating mic button visibility
     func toggleFloatingMicButton() {
         showFloatingMicButton.toggle()
@@ -725,7 +760,7 @@ final class AppState {
 
     /// Update subtitle overlay visibility based on current state
     private func updateSubtitleOverlay() {
-        if subtitleModeEnabled && isRecording {
+        if subtitleModeEnabled {
             SubtitleOverlayManager.shared.show(appState: self)
             // Optionally hide STT panel
             if subtitleHidePanelWhenActive {
@@ -742,8 +777,12 @@ final class AppState {
 
     /// Show STT panel without starting recording (user can then click record button)
     /// Public for AppleScript access
-    func showSTTPanel() {
+    func showSTTPanel(allowAutoStart: Bool = true) {
         guard !isProcessing else { return }
+        if showFloatingWindow {
+            floatingWindowManager.bringToFront()
+            return
+        }
 
         // Mutual exclusivity: close TTS panel and stop TTS if active
         if showTTSWindow || ttsState == .speaking || ttsState == .paused || ttsState == .loading {
@@ -770,7 +809,7 @@ final class AppState {
         showFloatingWindowWithState()
 
         // Auto-start recording if setting is enabled
-        if sttAutoStart {
+        if allowAutoStart && sttAutoStart {
             startRecording()
         }
     }
@@ -778,6 +817,8 @@ final class AppState {
     /// Start recording (can be called from panel button or auto-start)
     func startRecording() {
         guard !isProcessing && !isRecording && transcriptionState != .preparing else { return }
+        let feature: PermissionFeature = selectedAudioInputSourceType == .microphone ? .microphoneRecording : .systemAudioRecording
+        guard PermissionService.shared.ensureAccess(for: feature) else { return }
 
         // Mutual exclusivity: close TTS panel and stop TTS if active
         if showTTSWindow || ttsState == .speaking || ttsState == .paused || ttsState == .loading {
@@ -814,8 +855,10 @@ final class AppState {
         }
 
         // Start realtime STT (audio capture and connection)
-        Task {
+        recordingPreparationMessage = nil
+        recordingStartTask = Task {
             await startRealtimeSTT()
+            guard !Task.isCancelled else { return }
 
             // After audio capture has started, update UI state on main thread.
             // If startRealtimeSTT failed it sets transcriptionState to .error; in that
@@ -842,15 +885,7 @@ final class AppState {
                 isRecording = true
                 transcriptionState = .recording
 
-                // Start duration timer
-                recordingDuration = 0
-                recordingStartTime = Date()
-                durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                    Task { @MainActor in
-                        guard let self = self, let startTime = self.recordingStartTime else { return }
-                        self.recordingDuration = Date().timeIntervalSince(startTime)
-                    }
-                }
+                startDurationTimer()
 
                 // Show subtitle overlay if enabled
                 if subtitleModeEnabled {
@@ -882,17 +917,8 @@ final class AppState {
             realtimeSTTService?.selectedLanguage = selectedSTTLanguage
         }
 
-        // Configure audio source based on settings
-        // Fall back to microphone if system/app audio is selected but Screen Recording permission is missing
-        let effectiveSourceType: AudioInputSourceType
-        if (selectedAudioInputSourceType == .systemAudio || selectedAudioInputSourceType == .applicationAudio)
-            && !hasScreenRecordingPermission {
-            effectiveSourceType = .microphone
-            dprint("AppState: Screen Recording permission missing, falling back to microphone input")
-
-        } else {
-            effectiveSourceType = selectedAudioInputSourceType
-        }
+        // Keep the requested source; missing access is handled before recording starts.
+        let effectiveSourceType = selectedAudioInputSourceType
 
         switch effectiveSourceType {
         case .microphone:
@@ -907,8 +933,11 @@ final class AppState {
         realtimeSTTService?.vadMinimumRecordingTime = vadMinimumRecordingTime
         realtimeSTTService?.vadSilenceDuration = vadSilenceDuration
 
+        guard let startingService = realtimeSTTService else { return }
         do {
-            try await realtimeSTTService?.startListening()
+            try await startingService.startListening()
+            guard realtimeSTTService === startingService else { startingService.stopListening(); return }
+            try Task.checkCancellation()
 
             // Start system audio capture if needed
             if effectiveSourceType == .systemAudio {
@@ -917,12 +946,18 @@ final class AppState {
                 try await systemAudioCaptureService.startCapturingAppAudio(bundleID: selectedAudioAppBundleID)
             }
         } catch {
-            transcriptionState = .error(error.localizedDescription)
+            startingService.stopListening()
+            guard realtimeSTTService === startingService else { return }
+            if !Task.isCancelled { transcriptionState = .error(error.localizedDescription) }
         }
     }
 
     /// Start realtime STT for quick mode (floating mic button) with external delegate
-    func startRealtimeSTTForQuickMode(delegate: RealtimeSTTDelegate) async {
+    func startRealtimeSTTForQuickMode(delegate: RealtimeSTTDelegate) async -> Bool {
+        guard PermissionService.shared.ensureAccess(for: .microphoneRecording) else {
+            transcriptionState = .error(NSLocalizedString("Microphone access is needed to record speech. You can still use text to speech without it.", comment: "Recording permission guidance"))
+            return false
+        }
         // Clean up any existing service before creating a new one (defensive measure)
         realtimeSTTService?.stopListening()
         realtimeSTTService = nil
@@ -949,10 +984,31 @@ final class AppState {
         realtimeSTTService?.vadMinimumRecordingTime = vadMinimumRecordingTime
         realtimeSTTService?.vadSilenceDuration = vadSilenceDuration
 
+        guard let startingService = realtimeSTTService else { return false }
         do {
-            try await realtimeSTTService?.startListening()
+            try await startingService.startListening()
+            guard realtimeSTTService === startingService else { startingService.stopListening(); return false }
+            return startingService.isListening
+        } catch is CancellationError {
+            // Cancellation leaves the state chosen by stop/cancel intact.
+            return false
         } catch {
+            startingService.stopListening()
+            guard realtimeSTTService === startingService else { return false }
             transcriptionState = .error(error.localizedDescription)
+            return false
+        }
+    }
+
+    func startDurationTimer() {
+        stopDurationTimer()
+        recordingDuration = 0
+        recordingStartTime = Date()
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let startTime = self.recordingStartTime else { return }
+                self.recordingDuration = Date().timeIntervalSince(startTime)
+            }
         }
     }
 
@@ -963,7 +1019,10 @@ final class AppState {
         recordingStartTime = nil
     }
 
-    private func stopRecording() {
+    func stopRecording() {
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
+        recordingPreparationMessage = nil
         isRecording = false
 
         // Stop duration timer
@@ -991,16 +1050,8 @@ final class AppState {
             }
         }
 
-        // Hide subtitle overlay and restore panel (deferred to avoid blocking)
-        let shouldRestorePanel = subtitleHidePanelWhenActive && showFloatingWindow
-        Task { @MainActor in
-            SubtitleOverlayManager.shared.hide()
-            if shouldRestorePanel {
-                // Small delay to let UI settle before bringing panel back
-                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
-                floatingWindowManager.bringToFront()
-            }
-        }
+        // Stopping leaves the subtitle and its text visible. Closing is a separate action.
+
     }
 
     /// Stop recording and immediately insert the text
@@ -1043,7 +1094,10 @@ final class AppState {
 
     /// Cancel recording without inserting any text (called when panel is closed)
     func cancelRecording() {
-        if isRecording {
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
+        recordingPreparationMessage = nil
+        if isRecording || transcriptionState == .preparing {
             realtimeSTTService?.stopListening()
             realtimeSTTService = nil
             isRecording = false
@@ -1146,7 +1200,7 @@ final class AppState {
 
 
         // Mutual exclusivity: close STT panel and cancel recording if active
-        if showFloatingWindow || isRecording {
+        if showFloatingWindow || isRecording || transcriptionState == .preparing {
             cancelRecording()
         }
 
@@ -1177,6 +1231,8 @@ final class AppState {
             }
             return
         }
+
+        guard hasAccessibilityPermission else { return }
 
         // Otherwise retrieve selected text from the frontmost app in the background
         // and populate the panel when it arrives. The user can also start typing
@@ -1227,7 +1283,7 @@ final class AppState {
 
 
         // Mutual exclusivity: close STT panel and cancel recording if active
-        if showFloatingWindow || isRecording {
+        if showFloatingWindow || isRecording || transcriptionState == .preparing {
             cancelRecording()
         }
 
@@ -1447,7 +1503,7 @@ final class AppState {
             // Configure save panel to appear above all floating panels
             WindowLevelCoordinator.configureSavePanel(savePanel)
 
-            savePanel.begin { response in
+            WindowPresentation.panel(savePanel) { response in
                 if response == .OK, let url = savePanel.url {
                     do {
                         try audioData.write(to: url)
@@ -1465,9 +1521,9 @@ final class AppState {
                         alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
 
                         // Configure alert to appear above floating panels
-                        alert.window.level = .floating + 1
+                        // Presented as a sheet on the active window.
 
-                        alert.runModal()
+                        WindowPresentation.alert(alert)
                     }
                 }
             }
@@ -1477,8 +1533,13 @@ final class AppState {
     /// Show TTS panel without text (for manual input)
     /// Public for AppleScript access
     func showTTSPanel() {
+        if showTTSWindow {
+            floatingWindowManager.bringToFront()
+            return
+        }
+        stopTTS()
         // Mutual exclusivity: close STT panel and cancel recording if active
-        if showFloatingWindow || isRecording {
+        if showFloatingWindow || isRecording || transcriptionState == .preparing {
             cancelRecording()
         }
 
@@ -1519,8 +1580,9 @@ final class AppState {
 
     /// Start OCR region selection
     func startOCR() {
+        guard PermissionService.shared.ensureAccess(for: .ocr) else { return }
         // Close any open STT or TTS panels first
-        if showFloatingWindow || isRecording {
+        if showFloatingWindow || isRecording || transcriptionState == .preparing {
             cancelRecording()
         }
         if showTTSWindow || ttsState == .speaking || ttsState == .paused || ttsState == .loading {
@@ -1569,15 +1631,14 @@ final class AppState {
         savedTTSLanguageBeforeTranslation = selectedTTSLanguage
 
         // Determine best provider
-        let provider = TranslationFactory.bestAvailableProvider(
-            for: targetLanguage,
-            preferredProvider: translationProvider
-        )
+        let selection = TranslationFactory.selection(for: targetLanguage, preferredProvider: translationProvider,
+                                                     savedModel: selectedTranslationModel)
+        let provider = selection.provider
         dprint("Translation: Using provider = \(provider.displayName)")
 
 
         translationState = .translating
-        translationService = TranslationFactory.makeService(for: provider, model: selectedTranslationModel)
+        translationService = TranslationFactory.makeService(for: provider, model: selection.modelID)
 
         translationTask = Task { @MainActor in
             do {
@@ -1736,9 +1797,9 @@ final class AppState {
         alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
 
         // Configure alert to appear above floating panels
-        alert.window.level = .floating + 1
+        // Presented as a sheet on the active window.
 
-        alert.runModal()
+        WindowPresentation.alert(alert)
     }
 
     /// Transcribe an audio file
@@ -1786,8 +1847,12 @@ final class AppState {
                 )
 
                 if !Task.isCancelled {
-                    currentTranscription = result.text
-                    transcriptionState = .result(result.text)
+                    if let combined = FileTranscriptionText.appending(result.text, to: currentTranscription) {
+                        currentTranscription = combined
+                        transcriptionState = .result(combined)
+                    } else {
+                        transcriptionState = .error(NSLocalizedString("No speech could be recognized.", comment: "Empty file transcription"))
+                    }
                 }
             } catch {
                 if !Task.isCancelled {
@@ -1819,18 +1884,10 @@ final class AppState {
         openPanel.canChooseDirectories = false
         openPanel.canChooseFiles = true
 
-        // Build allowed content types safely
-        var allowedTypes: [UTType] = [.mp3, .wav, .mpeg4Audio]
-        let additionalExtensions = ["m4a", "aac", "webm", "ogg", "flac", "mp4"]
-        for ext in additionalExtensions {
-            if let type = UTType(filenameExtension: ext) {
-                allowedTypes.append(type)
-            }
-        }
-        openPanel.allowedContentTypes = allowedTypes
+        openPanel.allowedContentTypes = AudioFileSupport.contentTypes
 
         openPanel.title = NSLocalizedString("Select Audio File", comment: "Open panel title")
-        openPanel.message = NSLocalizedString("Choose an audio file to transcribe", comment: "Open panel message")
+        openPanel.message = AudioFileSupport.formatHint + "\n" + AudioFileSupport.limits(for: selectedRealtimeProvider)
 
         // Configure panel to appear above floating panels
         WindowLevelCoordinator.configureSavePanel(openPanel)
@@ -1838,7 +1895,7 @@ final class AppState {
         // Bring app to front
         NSApp.activate(ignoringOtherApps: true)
 
-        openPanel.begin { [weak self] response in
+        WindowPresentation.panel(openPanel) { [weak self] response in
             guard let self = self else { return }
             if response == .OK, let url = openPanel.url {
                 self.transcribeAudioFile(url)
@@ -2177,10 +2234,9 @@ final class AppState {
         alert.addButton(withTitle: NSLocalizedString("Already Supported", comment: "Donation reminder button"))
         alert.addButton(withTitle: NSLocalizedString("Later", comment: "Donation reminder button"))
 
-        alert.window.level = .floating + 1
+        // Presented as a sheet on the active window.
 
-        let response = alert.runModal()
-
+        WindowPresentation.alert(alert) { [self] response in
         switch response {
         case .alertFirstButtonReturn:
             // Support → Open GitHub Sponsors
@@ -2197,6 +2253,7 @@ final class AppState {
             nextDonationReminderDate = Calendar.current.date(byAdding: .day, value: 30, to: Date())
         default:
             break
+        }
         }
     }
 }
@@ -2394,6 +2451,11 @@ extension AppState: RealtimeSTTDelegate {
         }
     }
 
+    func realtimeSTT(_ service: RealtimeSTTService, didUpdatePreparation message: String?) {
+        guard realtimeSTTService === service else { return }
+        recordingPreparationMessage = message
+    }
+
     func realtimeSTT(_ service: RealtimeSTTService, didChangeListeningState isListening: Bool) {
         // State is managed by start/stop methods
     }
@@ -2432,6 +2494,7 @@ extension AppState: SystemAudioCaptureDelegate {
     }
 
     func systemAudioCapture(_ capture: SystemAudioCaptureService, didFailWithError error: Error) {
+        stopRecording()
         transcriptionState = .error(error.localizedDescription)
     }
 }

@@ -40,7 +40,7 @@ struct TranslationControls: View {
 
     /// Whether using macOS provider
     private var isMacOSProvider: Bool {
-        appState.translationProvider == .macOS
+        effectiveProvider == .macOS
     }
 
     /// Get language availability status from AppState cache
@@ -87,17 +87,19 @@ struct TranslationControls: View {
             // Provider selector
             providerSelector
 
+            if let reason = appState.effectiveTranslationSelection.fallbackReason {
+                Text(reason)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
             // Model selector (only for non-macOS providers)
             if !isMacOSProvider {
                 modelSelector
             }
         }
         .padding(.horizontal, 4)
-        .frame(height: 28)
-        .background(Color(.windowBackgroundColor))
-        .cornerRadius(6)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-        .fixedSize(horizontal: true, vertical: false)
+        .frame(minHeight: 28)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Re-check availability when app becomes active (after returning from System Settings)
             if isMacOSProvider {
@@ -283,7 +285,7 @@ struct TranslationControls: View {
                         Text(p.displayName)
                         Text("(\(p.description))")
                             .foregroundColor(.secondary)
-                        if p == appState.translationProvider {
+                        if p == effectiveProvider {
                             Image(systemName: "checkmark")
                         }
                     }
@@ -305,7 +307,7 @@ struct TranslationControls: View {
 
     @ViewBuilder
     private var modelSelector: some View {
-        let models = appState.translationProvider.availableModels
+        let models = effectiveProvider.availableModels
         let currentModel = models.first(where: { $0.id == appState.selectedTranslationModel })
             ?? models.first(where: { $0.isDefault })
 
@@ -337,10 +339,7 @@ struct TranslationControls: View {
 
     /// Get the effective provider (considering API key availability)
     private var effectiveProvider: TranslationProvider {
-        TranslationFactory.bestAvailableProvider(
-            for: appState.translationTargetLanguage,
-            preferredProvider: appState.translationProvider
-        )
+        appState.effectiveTranslationProvider
     }
 
     /// Check if API key is available for a provider
@@ -411,9 +410,8 @@ struct TranslationControls: View {
         alert.addButton(withTitle: NSLocalizedString("Open System Settings", comment: "Open system settings button"))
         alert.addButton(withTitle: NSLocalizedString("Cancel", comment: "Cancel button"))
 
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            openSystemSettings()
+        WindowPresentation.alert(alert) { response in
+            if response == .alertFirstButtonReturn { openSystemSettings() }
         }
     }
 
@@ -431,9 +429,8 @@ struct TranslationControls: View {
         alert.addButton(withTitle: NSLocalizedString("Open System Settings", comment: "Open system settings button"))
         alert.addButton(withTitle: NSLocalizedString("OK", comment: "OK button"))
 
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            openSystemSettings()
+        WindowPresentation.alert(alert) { response in
+            if response == .alertFirstButtonReturn { openSystemSettings() }
         }
     }
 }

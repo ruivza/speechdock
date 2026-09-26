@@ -122,6 +122,8 @@ end tell
 
 ### paste text
 
+貼り付け先の入力欄で結果を確認できた場合は `"inserted"`、確認できない場合は `"copied to clipboard"` を返します。後者はコピー済みとして案内し、手動で貼り付けられます。クリップボードへの書き込み自体に失敗した場合はエラーになります。
+
 指定されたテキストを最前面のアプリケーションにペーストします（Cmd+Vをシミュレート）。
 
 ```applescript
@@ -187,13 +189,18 @@ end tell
 | コマンド | 動作 |
 |---|---|
 | `show quick transcription` | 録音を開始せずにマイクボタンを表示 |
-| `show stt panel` | STTパネルを表示（自動開始設定に従う）。フローティング形式では上端のつまみで移動 |
-| `toggle stt panel` | STTパネルの表示を切り替え |
+| `show stt panel` | STTパネルを開く際はTTSを停止し、自動録音設定に従う。既に開いていれば本文と録音状態を保持 |
+| `toggle stt panel` | 表示中なら録音を止めて閉じ、非表示なら録音せず開く |
+| `hide stt panel` | 録音・ファイル文字起こしを止めて閉じる。閉じていれば何もしない |
 | `show tts panel` | テキスト入力用のTTSパネルを表示。フローティング形式では上端のつまみで移動 |
-| `toggle tts panel` | TTSパネルの表示を切り替え |
+| `toggle tts panel` | 表示中なら読み上げを止めて閉じ、非表示なら読み上げず開く |
+| `hide tts panel` | 読み上げ・音声生成を止めて閉じる。閉じていれば何もしない |
+| `hide subtitle` | 録音を止めて字幕を閉じる。非表示なら何もしない |
 | `show subtitle` | 字幕を有効にし、停止中なら録音を開始。上端のつまみで移動 |
 | `toggle subtitle` | 字幕モードの有効・無効を切り替え |
 | `start ocr` | 領域選択を開始し、認識テキストをTTSパネルへ送る |
+
+`toggle stt panel` と `toggle tts panel` は録音・読み上げを開始しません。表示の冪等な操作には `show` と `hide` の対を使えます。`show tts panel` は開く際にSTTを止めますが、読み上げは開始しません。`show subtitle` は録音も開始します。字幕の停止ボタンは録音だけを止め、字幕表示を残します。
 
 ## プロパティ
 

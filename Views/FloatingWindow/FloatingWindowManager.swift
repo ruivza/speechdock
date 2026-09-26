@@ -37,6 +37,8 @@ final class FloatingWindowManager: ObservableObject {
     private var floatingWindow: NSWindow?
     private var previousApp: NSRunningApplication?
     @Published var isVisible = false
+    var isActuallyVisible: Bool { floatingWindow?.isVisible ?? false }
+    var parentWindow: NSWindow? { floatingWindow }
     private var windowBecameKeyObserver: NSObjectProtocol?
     private var windowWillCloseObserver: NSObjectProtocol?
     private var keyboardEventMonitor: Any?
@@ -91,7 +93,10 @@ final class FloatingWindowManager: ObservableObject {
         saveWindowFrame()
 
         // Close any existing window first and recreate with current style
-        floatingWindow?.orderOut(nil)
+        if let window = floatingWindow {
+            window.orderOut(nil)
+            ActivationPolicyCoordinator.shared.windowDidHide(window)
+        }
         floatingWindow = nil
 
         currentWindowStyle = appState.panelStyle
@@ -121,7 +126,7 @@ final class FloatingWindowManager: ObservableObject {
 
         // Become regular app to ensure proper window activation
         // This is essential for accessory apps to receive keyboard focus
-        NSApp.setActivationPolicy(.regular)
+        if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowWillShow(window) }
 
         // For standard window mode, give macOS time to process the activation policy change
         // This ensures the Dock icon appears before the window is shown
@@ -312,11 +317,13 @@ final class FloatingWindowManager: ObservableObject {
             defer: false
         )
 
+        window.identifier = NSUserInterfaceItemIdentifier("speechPanel")
+        window.collectionBehavior = style == .floating ? ToolWindowPolicy.inputPanel : [.managed]
         window.level = level
         window.isReleasedWhenClosed = false
         window.hasShadow = true
         window.isMovableByWindowBackground = false // Floating views have an explicit drag handle.
-        window.title = title  // Visible in standard window mode
+        window.title = NSLocalizedString(title, comment: "Speech panel title")  // Visible in standard window mode
         window.minSize = Self.windowMinSize
         window.maxSize = Self.windowMaxSize
 
@@ -351,12 +358,8 @@ final class FloatingWindowManager: ObservableObject {
         }
 
         if let frame = sharedWindowFrame {
-            // Validate the frame is still on a visible screen
-            let screenFrame = NSScreen.main?.visibleFrame ?? NSRect.zero
-            if screenFrame.intersects(frame) {
-                window.setFrame(frame, display: true)
-                return
-            }
+            window.setFrame(WindowPlacement.fit(frame, visibleFrames: NSScreen.screens.map(\.visibleFrame)), display: true)
+            return
         }
 
         // Fall back to centering
@@ -392,7 +395,10 @@ final class FloatingWindowManager: ObservableObject {
         saveWindowFrame()
 
         // Close any existing window first
-        floatingWindow?.orderOut(nil)
+        if let window = floatingWindow {
+            window.orderOut(nil)
+            ActivationPolicyCoordinator.shared.windowDidHide(window)
+        }
         floatingWindow = nil
 
         // Create window with current style from settings
@@ -415,7 +421,7 @@ final class FloatingWindowManager: ObservableObject {
 
         // Become regular app to ensure proper window activation
         // This is essential for accessory apps to receive keyboard focus
-        NSApp.setActivationPolicy(.regular)
+        if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowWillShow(window) }
 
         // For standard window mode, give macOS time to process the activation policy change
         // This ensures the Dock icon appears before the window is shown
@@ -539,9 +545,10 @@ final class FloatingWindowManager: ObservableObject {
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self, weak window] _ in
             Task { @MainActor in
-                guard let self = self else { return }
+                if let window { ActivationPolicyCoordinator.shared.windowDidHide(window) }
+                guard let self = self, self.floatingWindow === window else { return }
 
                 // Stop STT recording if active
                 if let onCancel = self.storedOnCancel {
@@ -630,7 +637,7 @@ final class FloatingWindowManager: ObservableObject {
         guard let window = floatingWindow else { return }
 
         // Ensure we're a regular app so we can become key
-        NSApp.setActivationPolicy(.regular)
+        if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowWillShow(window) }
 
         // Update level to appear on top of other panels (only for floating style)
         if currentWindowStyle == .floating {
@@ -648,10 +655,12 @@ final class FloatingWindowManager: ObservableObject {
     /// Temporarily hide the floating window (for showing save panels, etc.)
     func temporarilyHideWindow() {
         floatingWindow?.orderOut(nil)
+        if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowDidHide(window) }
     }
 
     /// Restore the floating window after temporarily hiding it
     func restoreWindow() {
+        if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowWillShow(window) }
         floatingWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -693,19 +702,7 @@ final class FloatingWindowManager: ObservableObject {
         self.selectedWindow = nil
         self.clipboardOnly = false
 
-        // Return to accessory mode if no other windows are open
-        // Match the identifier WindowManager actually assigns ("settings", see
-        // WindowManager.openSettingsWindow). The previous check looked for a
-        // title of "Settings" and an "about" identifier, neither of which exist —
-        // the window is titled "SpeechDock Settings" and About is a category
-        // within the same settings window — so this was always false and the
-        // Dock icon disappeared whenever a panel closed over an open Settings.
-        let hasOtherWindows = NSApp.windows.contains {
-            $0.identifier?.rawValue == "settings" && $0.isVisible
-        }
-        if !hasOtherWindows {
-            NSApp.setActivationPolicy(.accessory)
-        }
+        if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowDidHide(window) }
     }
 
     /// Activate the selected window and return success status

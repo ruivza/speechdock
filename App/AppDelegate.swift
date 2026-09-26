@@ -5,6 +5,7 @@ import ScreenCaptureKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var hotKeyService: HotKeyService?
+    private var screenObserver: NSObjectProtocol?
     /// Flag set by explicit "Quit SpeechDock" menu action to bypass panel-close-first behavior
     var isExplicitQuit = false
 
@@ -17,7 +18,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Set as accessory app (no dock icon)
-        NSApp.setActivationPolicy(.accessory)
+        ActivationPolicyCoordinator.shared.updatePolicy()
+
+        screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                                               object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                for window in NSApp.windows where ["speechPanel", "subtitle", "quickMic"].contains(window.identifier?.rawValue ?? "") {
+                    WindowPlacement.fit(window)
+                }
+            }
+        }
 
         // Clean up stale temporary files from previous sessions
         cleanupStaleTempFiles()
@@ -222,32 +232,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Check permissions at startup and show setup window if any are missing.
-    /// Uses PermissionService for reactive monitoring — no app restart needed.
+    /// Offer setup once without requesting microphone access at launch.
     private func checkRequiredPermissions() {
-        let microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-
-        // Handle first-time microphone prompt (system dialog)
-        if microphoneStatus == .notDetermined {
-            Task { @MainActor in
-                let permissionService = PermissionService.shared
-                await permissionService.requestMicrophone()
-                // After system dialog, check remaining permissions
-                permissionService.refreshAllPermissions()
-                if permissionService.hasAnyMissing {
-                    PermissionSetupController.shared.show()
-                }
-            }
-            return
-        }
-
-        // Show setup window if any permissions are missing
         Task { @MainActor in
-            let permissionService = PermissionService.shared
-            dprint("Permission check: Microphone=\(microphoneStatus.rawValue), Accessibility=\(permissionService.accessibilityGranted), ScreenRecording=\(permissionService.screenRecordingGranted)")
-
-            if permissionService.hasAnyMissing {
+            let permissions = PermissionService.shared
+            permissions.refreshAllPermissions()
+            if permissions.shouldShowSetupOnLaunch {
                 PermissionSetupController.shared.show()
+            } else if permissions.allGranted {
+                permissions.completeSetup()
             }
         }
     }

@@ -111,47 +111,18 @@ enum TranslationFactory {
         for targetLanguage: LanguageCode,
         preferredProvider: TranslationProvider?
     ) -> TranslationProvider {
-        // If user has a preference and it supports the language, use it
-        if let preferred = preferredProvider,
-           preferred.supportsLanguage(targetLanguage) {
-            // Check API key availability for LLM providers
-            if preferred.requiresAPIKey {
-                let apiKey = APIKeyManager.shared.getAPIKey(for: preferred.envKeyName!)
-                if apiKey != nil && !apiKey!.isEmpty {
-                    return preferred
-                }
-            } else {
-                return preferred
-            }
-        }
-
-        // Fallback: Check providers in priority order
-        // 1. macOS Translation (no API key, on-device, requires macOS 26+)
-        if isMacOSTranslationAvailable && TranslationProvider.macOS.supportsLanguage(targetLanguage) {
-            return .macOS
-        }
-
-        // 2. OpenAI (if API key available)
-        if let apiKey = APIKeyManager.shared.getAPIKey(for: "OPENAI_API_KEY"),
-           !apiKey.isEmpty {
-            return .openAI
-        }
-
-        // 3. Gemini (if API key available)
-        if let apiKey = APIKeyManager.shared.getAPIKey(for: "GEMINI_API_KEY"),
-           !apiKey.isEmpty {
-            return .gemini
-        }
-
-        // 4. Grok (if API key available)
-        if let apiKey = APIKeyManager.shared.getAPIKey(for: "GROK_API_KEY"),
-           !apiKey.isEmpty {
-            return .grok
-        }
-
-        // Default to macOS (will show error if language not supported)
-        return .macOS
+        selection(for: targetLanguage, preferredProvider: preferredProvider).provider
     }
+
+    static func selection(for targetLanguage: LanguageCode, preferredProvider: TranslationProvider?,
+                          savedModel: String = "") -> TranslationSelection {
+        TranslationSelection.resolve(preferred: preferredProvider, target: targetLanguage,
+                                     savedModel: savedModel, macOSAvailable: isMacOSTranslationAvailable) { provider in
+            guard let key = provider.envKeyName else { return true }
+            return !(APIKeyManager.shared.getAPIKey(for: key) ?? "").isEmpty
+        }
+    }
+
 }
 
 // MARK: - API Retry Helper

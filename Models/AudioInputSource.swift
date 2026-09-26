@@ -8,6 +8,7 @@ enum AudioInputSourceType: String, CaseIterable, Codable, Identifiable {
     case applicationAudio = "App Audio"
 
     var id: String { rawValue }
+    var displayName: String { NSLocalizedString(rawValue, comment: "Audio source") }
 
     var icon: String {
         switch self {
@@ -47,9 +48,9 @@ struct AudioInputSource: Equatable, Identifiable {
     var displayName: String {
         switch type {
         case .microphone:
-            return "Microphone"
+            return NSLocalizedString("Microphone", comment: "Audio source")
         case .systemAudio:
-            return "System Audio"
+            return NSLocalizedString("System Audio", comment: "Audio source")
         case .applicationAudio:
             return applicationName ?? "App"
         }

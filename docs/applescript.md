@@ -120,7 +120,7 @@ end tell
 
 ### paste text
 
-Paste the given text into the frontmost application (simulates Cmd+V).
+Copy the given text and request a paste into the frontmost application (Cmd+V). Returns `"inserted"` only when the focused field confirms the expected text; otherwise returns `"copied to clipboard"` and keeps the text available for manual paste. A clipboard write failure raises an error.
 
 ```applescript
 tell application "SpeechDock"
@@ -185,13 +185,18 @@ If not recording, starts recording. If recording, stops and pastes the transcrib
 | Command | Action |
 |---|---|
 | `show quick transcription` | Show the mic button without starting recording |
-| `show stt panel` | Show the STT panel, respecting the auto-start setting; move floating panels using the top handle |
-| `toggle stt panel` | Toggle the STT panel |
-| `show tts panel` | Show the TTS panel for text input; move floating panels using the top handle |
-| `toggle tts panel` | Toggle the TTS panel |
+| `show stt panel` | Open the STT panel, stop TTS and respect the auto-start setting. An already open panel preserves its text and recording state |
+| `toggle stt panel` | Close the visible panel and stop recording, or open without recording |
+| `hide stt panel` | Stop recording/file transcription and close; harmless if already closed |
+| `show tts panel` | Open the TTS panel and stop STT, without speaking. An already open panel preserves its text |
+| `toggle tts panel` | Close the visible panel and stop speech, or open without speaking |
+| `hide tts panel` | Stop speech/audio generation and close; harmless if already closed |
 | `show subtitle` | Enable subtitles and start recording if stopped; move the overlay using the top handle |
 | `toggle subtitle` | Toggle subtitle mode |
+| `hide subtitle` | Stop recording and close subtitles; harmless if already hidden |
 | `start ocr` | Select a screen region and send recognized text to the TTS panel |
+
+`toggle stt panel` and `toggle tts panel` never start recording or speech. Use `show`/`hide` for idempotent visibility changes. `show subtitle` also starts recording; the subtitle Stop button stops recording while leaving subtitles visible.
 
 ## Properties
 

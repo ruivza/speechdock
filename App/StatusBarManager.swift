@@ -81,7 +81,7 @@ final class StatusBarManager: NSObject {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.level = .popUpMenu
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = ToolWindowPolicy.currentSpace
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
 
@@ -454,14 +454,7 @@ struct MenuBarPanelContainer<Content: View>: View {
     private var legacyStyledContent: some View {
         content
             .background(
-                ZStack {
-                    MenuBarVisualEffectBlur(material: .popover, blendingMode: .behindWindow)
-                    Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-                        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                            ? NSColor(white: 0.18, alpha: 0.85)
-                            : NSColor(white: 0.96, alpha: 0.85)
-                    }))
-                }
+                PanelSurface()
             )
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(

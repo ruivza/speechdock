@@ -480,3 +480,65 @@
 "── Enhanced ──" = "── Enhanced ──";
 "── Standard ──" = "── Standard ──";
 "N/A" = "N/A";
+
+"Supported text files: %@" = "Supported text files: %@";
+"The file could not be read as text. Save plain text as UTF-8, or use a valid RTF file." = "The file could not be read as text. Save plain text as UTF-8, or use a valid RTF file.";
+"Could Not Import Text" = "Could Not Import Text";
+"API key not set" = "API key not set";
+"Language not supported" = "Language not supported";
+
+"Allow only the features you need. Text to speech works without microphone access." = "Allow only the features you need. Text to speech works without microphone access.";
+
+"For inserting text into other apps" = "For inserting text into other apps";
+
+"For OCR, system/app audio capture and window thumbnails" = "For OCR, system/app audio capture and window thumbnails";
+
+"If Screen Recording is enabled in System Settings but still unavailable here, restart SpeechDock." = "If Screen Recording is enabled in System Settings but still unavailable here, restart SpeechDock.";
+
+"Microphone access is needed to record speech. You can still use text to speech without it." = "Microphone access is needed to record speech. You can still use text to speech without it.";
+
+"Screen Recording access is needed to capture system or app audio." = "Screen Recording access is needed to capture system or app audio.";
+
+"Screen Recording access is needed to capture text with OCR." = "Screen Recording access is needed to capture text with OCR.";
+
+"Accessibility access is needed to insert text into another app. You can still copy and paste manually." = "Accessibility access is needed to insert text into another app. You can still copy and paste manually.";
+
+"Granted" = "Granted";
+
+"Not requested" = "Not requested";
+
+"Denied" = "Denied";
+
+"Restricted" = "Restricted";
+
+"Not granted" = "Not granted";
+
+"Allow" = "Allow";
+"Accessibility is used to capture selected text" = "Accessibility is used to capture selected text";
+"Permissions..." = "Permissions...";
+"Continue" = "Continue";
+
+/* Interface and permission guidance */
+"Also used by: %@" = "Also used by: %@";
+"Click or %@ to dictate; drag to move" = "Click or %@ to dictate; drag to move";
+"Click to dictate; drag to move" = "Click to dictate; drag to move";
+"Copied to Clipboard" = "Copied to Clipboard";
+"Downloading language model: %d%%" = "Downloading language model: %d%%";
+"Drag to move window" = "Drag to move window";
+"Maximum %d MB · Duration: %@" = "Maximum %d MB · Duration: %@";
+"Maximum 100 MB · No duration limit" = "Maximum 100 MB · No duration limit";
+"No speech could be recognized." = "No speech could be recognized.";
+"Paste could not be verified. You can paste the copied text manually." = "Paste could not be verified. You can paste the copied text manually.";
+"Preparing speech recognition..." = "Preparing speech recognition...";
+"Recording %@ — click or %@ to stop" = "Recording %@ — click or %@ to stop";
+"Select the language you will speak. macOS recognition uses this language." = "Select the language you will speak. macOS recognition uses this language.";
+"Shortcut conflicts" = "Shortcut conflicts";
+"Shortcut could not be registered (error %d). Choose another combination." = "Shortcut could not be registered (error %d). Choose another combination.";
+"SpeechDock Settings" = "SpeechDock Settings";
+"Close subtitles" = "Close subtitles";
+"Stopped" = "Stopped";
+"%@ to stop" = "%@ to stop";
+"No limit" = "No limit";
+"~10 min" = "~10 min";
+"~2 hours" = "~2 hours";
+"On-device speech recognition (macOS 26+)" = "On-device speech recognition (macOS 26+)";

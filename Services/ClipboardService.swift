@@ -64,14 +64,27 @@ final class ClipboardService {
             return false
         }
 
+        let canInsert = await MainActor.run { PermissionService.shared.ensureAccess(for: .textInsertion) }
+        guard canInsert else { return false }
+
+        let targetPID = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+        let verification = await MainActor.run { PasteVerification.capture(inserting: text) }
+
         // Short delay to allow clipboard to stabilize before pasting
         try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
         // Perform paste using CGEvent (more reliable, no System Events permission required)
         await MainActor.run {
-            simulatePasteWithCGEvent()
+            if let targetPID, targetPID != getpid(), NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID {
+                simulatePasteWithCGEvent()
+            }
         }
-        return true
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        return await MainActor.run {
+            if verification?.isConfirmed == true { return true }
+            ClipboardNotice.shared.showCopied()
+            return false
+        }
     }
 
     /// Simulate Cmd+V using CGEvent (no System Events permission required)

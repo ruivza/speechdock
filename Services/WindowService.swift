@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import ScreenCaptureKit
 
 /// Information about a window for selection
 struct WindowInfo: Identifiable, Hashable {
@@ -212,34 +213,24 @@ final class WindowService {
         return windows
     }
 
-    /// Generate thumbnail for a specific window asynchronously
-    /// Call this from a background task to avoid blocking main thread
-    ///
-    /// NOTE: CGWindowListCreateImage is deprecated (macOS 14) but kept while the
-    /// app supports macOS 14 — see ScreenCaptureService for the full rationale.
+    /// Capture only the selected window, asynchronously and at thumbnail resolution.
     nonisolated func generateThumbnailAsync(for windowID: CGWindowID, bounds: CGRect) async -> NSImage? {
-        // Run on a background thread
-        return await Task.detached(priority: .userInitiated) {
-            guard let cgImage = CGWindowListCreateImage(
-                bounds,
-                .optionIncludingWindow,
-                windowID,
-                [.boundsIgnoreFraming, .nominalResolution]
-            ) else {
-                return nil
-            }
-
-            // Scale down for thumbnail
-            let maxSize: CGFloat = 200
-            let scale = min(maxSize / bounds.width, maxSize / bounds.height, 1.0)
-            let thumbnailSize = NSSize(
-                width: bounds.width * scale,
-                height: bounds.height * scale
-            )
-
-            let image = NSImage(cgImage: cgImage, size: thumbnailSize)
-            return image
-        }.value
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            guard let window = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
+            try Task.checkCancellation()
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            let scale = min(200 / bounds.width, 200 / bounds.height, 1)
+            let config = SCStreamConfiguration()
+            config.width = max(1, Int(bounds.width * scale))
+            config.height = max(1, Int(bounds.height * scale))
+            config.showsCursor = false
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            return NSImage(cgImage: image, size: NSSize(width: config.width, height: config.height))
+        } catch {
+            return nil // Permission loss or a closed window leaves the app icon visible.
+        }
     }
 
     /// Check if a window still exists

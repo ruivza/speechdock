@@ -8,14 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Idempotent AppleScript hide commands for speech panels and subtitles.
+- Visible shortcut registration errors and duplicate shortcut guidance.
 - Quick transcription displays recording errors beside the floating mic button.
 
 ### Changed
+- Panel toggles change visibility without starting recording or speech; subtitle Stop keeps the overlay visible.
+- Translation controls collapse below the editor. Settings resize horizontally and show model descriptions separately.
+- Improved keyboard focus, quick-microphone accessibility, reduced-motion behavior, drag-handle labels, and six-language guidance.
+- Auxiliary tools open on the active Space, including full screen, instead of joining every Space; editable speech panels activate a normal desktop Space.
+- OCR and window thumbnails use ScreenCaptureKit on macOS 14 and later.
+- Permission setup can be skipped and remembers the choice. Missing permissions are explained when starting the relevant feature; text to speech works without microphone access.
 - Gemini TTS now offers only Gemini 3.8 Flash TTS (default) and Flash-Lite TTS. Previous Gemini TTS model selections reset to the default.
 - Unsupported or empty saved STT, TTS, and translation model selections reset to the current provider default.
 - Gemini playback speed can be adjusted locally; exported audio keeps its original pace.
 
 ### Fixed
+- Removed the TTS panel "Close" shortcut, which had no effect and was reported as a conflict with Stop Speaking (⌘.).
+- The drop prompt no longer overlaps the empty-panel hint when an audio file is dragged over the STT panel, and the file transcription progress text is readable.
+- File transcription preserves drafts, reports empty results, and accepts AIFF/AIF consistently.
+- Initial speech-model downloads show cancellable progress before microphone capture begins.
+- System-audio interruptions stop recognition and report an error.
+- Dialogs attach to their parent windows, and restored windows remain reachable after display changes.
+- Unverified automatic pastes are reported as copied to the clipboard.
+- The Dock icon remains visible until all STT/TTS panels, Settings, and permission setup windows close.
+- Dropping a text file inserts its contents at the drop position, supports Undo, and reports unsupported formats or invalid UTF-8 instead of inserting a path.
+- Translation controls and subtitles use the same effective provider as translation execution, explain fallback, and hide cloud models when using macOS.
 - Fixed floating STT, TTS, and subtitle windows not moving on macOS 27. Drag the handle at the top of each window; standard windows still move by their title bars.
 - Improved audio capture reliability for devices with multiple streams and kept speech-recognition audio conversion in a serial pipeline.
 - File transcription retries transient network and server errors, and cancels outstanding recognition when stopped.

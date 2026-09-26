@@ -1,9 +1,12 @@
 import SwiftUI
 
 /// Permission setup view displayed as a checklist with real-time status updates.
-/// Shows Microphone (required), Accessibility (recommended), and Screen Recording (optional).
+/// Every permission is optional until its associated feature is used.
+@Observable
+final class PermissionSetupReason { var message: String? }
 struct PermissionSetupView: View {
-    let permissionService = PermissionService.shared
+    var permissionService = PermissionService.shared
+    var reason = PermissionSetupReason()
     var onContinue: () -> Void
     var onLater: () -> Void
 
@@ -18,7 +21,7 @@ struct PermissionSetupView: View {
                 Text("SpeechDock Permissions")
                     .font(.title2.bold())
 
-                Text("SpeechDock needs the following permissions to work properly.")
+                Text(reason.message ?? NSLocalizedString("Allow only the features you need. Text to speech works without microphone access.", comment: "Permission setup introduction"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -36,9 +39,13 @@ struct PermissionSetupView: View {
                     icon: "mic.fill",
                     name: NSLocalizedString("Microphone", comment: "Permission name"),
                     description: NSLocalizedString("For speech recognition", comment: "Microphone permission description"),
-                    badge: .required,
-                    isGranted: permissionService.microphoneGranted,
-                    action: { permissionService.openMicrophoneSettings() }
+                    badge: .optional,
+                    status: permissionService.microphoneStatus,
+                    action: {
+                        if permissionService.microphoneStatus == .notRequested {
+                            Task { await permissionService.requestMicrophone() }
+                        } else { permissionService.openMicrophoneSettings() }
+                    }
                 )
 
                 Divider()
@@ -47,9 +54,9 @@ struct PermissionSetupView: View {
                 permissionRow(
                     icon: "hand.raised.fill",
                     name: NSLocalizedString("Accessibility", comment: "Permission name"),
-                    description: NSLocalizedString("For global keyboard shortcuts and text insertion", comment: "Accessibility permission description"),
+                    description: NSLocalizedString("For inserting text into other apps", comment: "Accessibility permission description"),
                     badge: .recommended,
-                    isGranted: permissionService.accessibilityGranted,
+                    status: permissionService.accessibilityGranted ? .granted : .notGranted,
                     action: { permissionService.openAccessibilitySettings() }
                 )
 
@@ -59,13 +66,18 @@ struct PermissionSetupView: View {
                 permissionRow(
                     icon: "rectangle.dashed.badge.record",
                     name: NSLocalizedString("Screen Recording", comment: "Permission name"),
-                    description: NSLocalizedString("For system/app audio capture and window thumbnails", comment: "Screen recording permission description"),
+                    description: NSLocalizedString("For OCR, system/app audio capture and window thumbnails", comment: "Screen recording permission description"),
                     badge: .optional,
-                    isGranted: permissionService.screenRecordingGranted,
+                    status: permissionService.screenRecordingGranted ? .granted : .notGranted,
                     action: { permissionService.openScreenRecordingSettings() }
                 )
             }
             .padding(.vertical, 12)
+
+            Text("If Screen Recording is enabled in System Settings but still unavailable here, restart SpeechDock.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 28)
 
             Spacer()
 
@@ -87,11 +99,10 @@ struct PermissionSetupView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(!permissionService.microphoneGranted)
             }
             .padding(.vertical, 16)
         }
-        .frame(width: 480, height: 420)
+        .frame(width: 540, height: 530)
         .animation(.snappy, value: permissionService.microphoneGranted)
         .animation(.snappy, value: permissionService.accessibilityGranted)
         .animation(.snappy, value: permissionService.screenRecordingGranted)
@@ -100,11 +111,10 @@ struct PermissionSetupView: View {
     // MARK: - Permission Row
 
     private enum PermissionBadge {
-        case required, recommended, optional
+        case recommended, optional
 
         var text: String {
             switch self {
-            case .required: return NSLocalizedString("Required", comment: "Permission badge")
             case .recommended: return NSLocalizedString("Recommended", comment: "Permission badge")
             case .optional: return NSLocalizedString("Optional", comment: "Permission badge")
             }
@@ -112,7 +122,6 @@ struct PermissionSetupView: View {
 
         var color: Color {
             switch self {
-            case .required: return .red
             case .recommended: return .orange
             case .optional: return .secondary
             }
@@ -125,14 +134,14 @@ struct PermissionSetupView: View {
         name: String,
         description: String,
         badge: PermissionBadge,
-        isGranted: Bool,
+        status: PermissionAccessStatus,
         action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
             // Icon
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundColor(isGranted ? .green : .accentColor)
+                .foregroundColor(status == .granted ? .green : .accentColor)
                 .frame(width: 28)
 
             // Name and description
@@ -158,17 +167,20 @@ struct PermissionSetupView: View {
             Spacer()
 
             // Status indicator
-            if isGranted {
+            if status == .granted {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title3)
                     .foregroundStyle(.green)
             } else {
-                Button(action: action) {
-                    Text("Open Settings")
-                        .font(.caption)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(status.label).font(.caption).foregroundStyle(.secondary)
+                    Button(action: action) {
+                        Text(status == .notRequested ? "Allow" : "Open Settings")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         }
         .padding(.horizontal, 28)

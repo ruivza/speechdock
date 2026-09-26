@@ -278,6 +278,7 @@ final class SystemAudioCaptureService: NSObject, ObservableObject {
 
     /// Start capture with the given filter
     private func startCapture(with filter: SCContentFilter, captureType: AudioInputSourceType) async throws {
+        try Task.checkCancellation()
         let config = SCStreamConfiguration()
 
         // We only want audio, minimize video capture
@@ -295,7 +296,7 @@ final class SystemAudioCaptureService: NSObject, ObservableObject {
         config.excludesCurrentProcessAudio = true
 
         // Create stream
-        let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+        let stream = SCStream(filter: filter, configuration: config, delegate: self)
 
         // Create and add output handler
         let output = AudioStreamOutput(delegate: self)
@@ -306,6 +307,11 @@ final class SystemAudioCaptureService: NSObject, ObservableObject {
 
         // Start capture
         try await stream.startCapture()
+        if Task.isCancelled || self.stream !== stream {
+            try? await stream.stopCapture()
+            if self.stream === stream { self.stream = nil; self.streamOutput = nil }
+            throw CancellationError()
+        }
         isCapturing = true
         dprint("SystemAudioCapture: Started capturing \(captureType.rawValue)")
 
@@ -313,7 +319,10 @@ final class SystemAudioCaptureService: NSObject, ObservableObject {
 
     /// Stop capturing
     func stopCapturing() async {
-        guard isCapturing, let stream = stream else { return }
+        guard let stream = stream else { return }
+        self.stream = nil
+        self.streamOutput = nil
+        isCapturing = false
 
         do {
             try await stream.stopCapture()
@@ -322,11 +331,20 @@ final class SystemAudioCaptureService: NSObject, ObservableObject {
 
         }
 
-        self.stream = nil
-        self.streamOutput = nil
-        isCapturing = false
         dprint("SystemAudioCapture: Stopped capturing")
 
+    }
+}
+
+extension SystemAudioCaptureService: SCStreamDelegate {
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        Task { @MainActor [weak self] in
+            guard let self, self.stream === stream else { return }
+            self.stream = nil
+            self.streamOutput = nil
+            self.isCapturing = false
+            self.delegate?.systemAudioCapture(self, didFailWithError: error)
+        }
     }
 }
 
@@ -349,7 +367,8 @@ private class AudioStreamOutput: NSObject, SCStreamOutput {
 
         // Notify delegate on main thread
         Task { @MainActor in
-            self.delegate?.delegate?.systemAudioCapture(self.delegate!, didCaptureAudioBuffer: audioBuffer)
+            guard let capture = self.delegate, capture.isCapturing else { return }
+            capture.delegate?.systemAudioCapture(capture, didCaptureAudioBuffer: audioBuffer)
         }
     }
 

@@ -22,6 +22,23 @@ def app_version
   File.read(VERSION_FILES[:version]).strip
 end
 
+# Xcode tools run with an allowlisted environment only. xcodebuild records the
+# build environment in DerivedData, so anything exported in the developer's
+# shell (API keys, tokens, passwords under any name) must not reach it. Release
+# tasks that authenticate through environment variables are unaffected.
+XCODE_ENV_ALLOWLIST = %w[
+  PATH HOME USER LOGNAME SHELL TMPDIR TERM LANG LC_ALL LC_CTYPE
+  DEVELOPER_DIR SSH_AUTH_SOCK
+].freeze
+
+def xcode_env
+  ENV.to_h.slice(*XCODE_ENV_ALLOWLIST)
+end
+
+def xcode_sh(command)
+  sh(xcode_env, command, unsetenv_others: true)
+end
+
 # Find the built app in DerivedData
 def find_built_app(config)
   Dir.glob("#{DERIVED_DATA}/#{APP_NAME}-*/Build/Products/#{config}/#{APP_NAME}.app").first
@@ -144,7 +161,7 @@ namespace :project do
   desc "Generate Xcode project with XcodeGen"
   task :generate do
     puts "Generating Xcode project..."
-    sh "xcodegen generate"
+    xcode_sh "xcodegen generate"
     puts "Project generated: #{PROJECT_FILE}"
   end
 
@@ -162,21 +179,21 @@ namespace :build do
   desc "Build for Debug"
   task :debug => "project:generate" do
     puts "Building #{APP_NAME} (Debug)..."
-    sh "xcodebuild -project #{PROJECT_FILE} -scheme #{SCHEME} -configuration Debug build"
+    xcode_sh "xcodebuild -project #{PROJECT_FILE} -scheme #{SCHEME} -configuration Debug build"
     puts "Build complete!"
   end
 
   desc "Build for Release"
   task :release => "project:generate" do
     puts "Building #{APP_NAME} (Release)..."
-    sh "xcodebuild -project #{PROJECT_FILE} -scheme #{SCHEME} -configuration Release build"
+    xcode_sh "xcodebuild -project #{PROJECT_FILE} -scheme #{SCHEME} -configuration Release build"
     puts "Build complete!"
   end
 
   desc "Clean build"
   task :clean do
     puts "Cleaning..."
-    sh "xcodebuild -project #{PROJECT_FILE} -scheme #{SCHEME} clean" if File.exist?(PROJECT_FILE)
+    xcode_sh "xcodebuild -project #{PROJECT_FILE} -scheme #{SCHEME} clean" if File.exist?(PROJECT_FILE)
     FileUtils.rm_rf(BUILD_DIR)
     puts "Clean complete!"
   end
@@ -190,13 +207,13 @@ namespace :test do
   desc "Run all tests"
   task :all => "project:generate" do
     puts "Running all tests..."
-    sh "xcodebuild test -project #{PROJECT_FILE} -scheme #{SCHEME} -destination 'platform=macOS'"
+    xcode_sh "xcodebuild test -project #{PROJECT_FILE} -scheme #{SCHEME} -destination 'platform=macOS'"
   end
 
   desc "Run tests with summary only"
   task :quick => "project:generate" do
     puts "Running tests (summary only)..."
-    sh "xcodebuild test -project #{PROJECT_FILE} -scheme #{SCHEME} -destination 'platform=macOS' 2>&1 | grep -E '(Test Suite|Executed|SUCCEEDED|FAILED)'"
+    xcode_sh "xcodebuild test -project #{PROJECT_FILE} -scheme #{SCHEME} -destination 'platform=macOS' 2>&1 | grep -E '(Test Suite|Executed|SUCCEEDED|FAILED)'"
   end
 
   desc "Run specific test class (e.g., rake test:class[AppleScriptTests])"
@@ -206,7 +223,7 @@ namespace :test do
       exit 1
     end
     puts "Running tests for #{args[:name]}..."
-    sh "xcodebuild test -project #{PROJECT_FILE} -scheme #{SCHEME} -destination 'platform=macOS' -only-testing:SpeechDockTests/#{args[:name]}"
+    xcode_sh "xcodebuild test -project #{PROJECT_FILE} -scheme #{SCHEME} -destination 'platform=macOS' -only-testing:SpeechDockTests/#{args[:name]}"
   end
 end
 

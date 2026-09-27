@@ -542,3 +542,7 @@
 "~10 min" = "~10 min";
 "~2 hours" = "~2 hours";
 "On-device speech recognition (macOS 26+)" = "On-device speech recognition (macOS 26+)";
+
+/* Translation row */
+"Hide translation controls" = "Hide translation controls";
+"Show translation controls" = "Show translation controls";

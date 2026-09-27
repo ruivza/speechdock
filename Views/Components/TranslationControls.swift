@@ -89,7 +89,7 @@ struct TranslationControls: View {
 
             if let reason = appState.effectiveTranslationSelection.fallbackReason {
                 Text(reason)
-                    .font(.system(size: 10))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -117,9 +117,9 @@ struct TranslationControls: View {
         }) {
             HStack(spacing: 4) {
                 Image(systemName: "globe")
-                    .font(.system(size: 12))
+                    .font(.callout)
                 Text("Translate")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.callout.weight(.medium))
             }
             .fixedSize()
             .foregroundColor(canTranslate ? .secondary : .secondary.opacity(0.4))
@@ -156,11 +156,11 @@ struct TranslationControls: View {
         }) {
             HStack(spacing: 4) {
                 Image(systemName: "globe")
-                    .font(.system(size: 12))
+                    .font(.callout)
                 Text("Original")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.callout.weight(.medium))
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
             }
             .fixedSize()
             .foregroundColor(.accentColor)
@@ -184,9 +184,9 @@ struct TranslationControls: View {
                 ProgressView()
                     .controlSize(.mini)
                 Text("Translating...")
-                    .font(.system(size: 11))
+                    .font(.callout)
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 10))
+                    .font(.caption)
             }
             .foregroundColor(.secondary)
             .padding(.horizontal, 6)
@@ -249,15 +249,10 @@ struct TranslationControls: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text("→ \(targetLanguageDisplayName)")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary.opacity(0.7))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7))
-                    .foregroundColor(.secondary.opacity(0.5))
-            }
-            .fixedSize()
+            Text("→ \(targetLanguageDisplayName)")
+                .font(.callout)
+                .fontWeight(.medium)
+                .fixedSize()
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -294,8 +289,8 @@ struct TranslationControls: View {
             }
         } label: {
             Text(provider.displayName)
-                .font(.system(size: 10))
-                .foregroundColor(.secondary.opacity(0.7))
+                .font(.callout)
+                .fontWeight(.medium)
         }
         .menuStyle(.borderlessButton)
         .disabled(!canChangeSettings)
@@ -326,8 +321,8 @@ struct TranslationControls: View {
             }
         } label: {
             Text(currentModel?.name ?? "")
-                .font(.system(size: 10))
-                .foregroundColor(.secondary.opacity(0.7))
+                .font(.callout)
+                .fontWeight(.medium)
         }
         .menuStyle(.borderlessButton)
         .disabled(!canChangeSettings)
@@ -432,6 +427,41 @@ struct TranslationControls: View {
         WindowPresentation.alert(alert) { response in
             if response == .alertFirstButtonReturn { openSystemSettings() }
         }
+    }
+}
+
+/// Collapsible translation row: the "Translation" toggle and, when expanded,
+/// the controls on the same line (no separate header row).
+struct TranslationDisclosureRow<Content: View>: View {
+    @Binding var isExpanded: Bool
+    @ViewBuilder var content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Text("Translation")
+                        .font(.callout)
+                }
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .help(isExpanded ? NSLocalizedString("Hide translation controls", comment: "Translation row") : NSLocalizedString("Show translation controls", comment: "Translation row"))
+
+            if isExpanded {
+                content()
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 28)
     }
 }
 

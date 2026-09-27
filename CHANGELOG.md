@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Panel toggles change visibility without starting recording or speech; subtitle Stop keeps the overlay visible.
-- Translation controls collapse below the editor. Settings resize horizontally and show model descriptions separately.
+- Translation controls collapse below the editor into a single row, with text sized to match the rest of the panel. Settings resize horizontally and show model descriptions separately.
+- Speech-to-text and text-to-speech panels are opaque in the floating style as well.
 - Improved keyboard focus, quick-microphone accessibility, reduced-motion behavior, drag-handle labels, and six-language guidance.
 - Auxiliary tools open on the active Space, including full screen, instead of joining every Space; editable speech panels activate a normal desktop Space.
 - OCR and window thumbnails use ScreenCaptureKit on macOS 14 and later.

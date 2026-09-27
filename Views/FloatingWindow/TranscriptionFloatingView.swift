@@ -633,7 +633,7 @@ struct TranscriptionFloatingView: View {
 
     @ViewBuilder
     private var panelBackground: some View {
-        PanelSurface(opaque: !isFloatingStyle)
+        PanelSurface(opaque: true)  // text panels stay opaque in both styles
     }
 
     /// Border overlay for text area
@@ -917,7 +917,7 @@ struct TranscriptionFloatingView: View {
     private var translationControlsView: some View {
         // Don't show translation controls when recording or transcribing
         if !isBusy {
-            DisclosureGroup("Translation", isExpanded: $translationExpanded) {
+            TranslationDisclosureRow(isExpanded: $translationExpanded) {
             TranslationControls(
                 appState: appState,
                 text: displayTextForTranslation,
@@ -926,7 +926,7 @@ struct TranscriptionFloatingView: View {
                 }
             )
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
         }
     }
 

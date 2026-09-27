@@ -530,7 +530,7 @@ struct TTSFloatingView: View {
 
     @ViewBuilder
     private var panelBackground: some View {
-        PanelSurface(opaque: !isFloatingStyle)
+        PanelSurface(opaque: true)  // text panels stay opaque in both styles
     }
 
     /// Border overlay for text area
@@ -942,7 +942,7 @@ struct TTSFloatingView: View {
     private var translationControlsView: some View {
         let isActive = appState.ttsState == .speaking || appState.ttsState == .loading
         if !isActive {
-            DisclosureGroup("Translation", isExpanded: $translationExpanded) {
+            TranslationDisclosureRow(isExpanded: $translationExpanded) {
             TranslationControls(
                 appState: appState,
                 text: displayText,
@@ -952,7 +952,7 @@ struct TTSFloatingView: View {
                 applySameLanguageGuard: false
             )
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
         }
     }
 

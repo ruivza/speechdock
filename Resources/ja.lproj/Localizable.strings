@@ -542,3 +542,7 @@
 "~10 min" = "約10分";
 "~2 hours" = "約2時間";
 "On-device speech recognition (macOS 26+)" = "デバイス内での音声認識（macOS 26以降）";
+
+/* Translation row */
+"Hide translation controls" = "翻訳の操作を隠す";
+"Show translation controls" = "翻訳の操作を表示";

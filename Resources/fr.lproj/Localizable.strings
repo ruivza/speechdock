@@ -527,3 +527,7 @@
 "~10 min" = "Environ 10 min";
 "~2 hours" = "Environ 2 h";
 "On-device speech recognition (macOS 26+)" = "Reconnaissance vocale sur l’appareil (macOS 26+)";
+
+/* Translation row */
+"Hide translation controls" = "Masquer les commandes de traduction";
+"Show translation controls" = "Afficher les commandes de traduction";

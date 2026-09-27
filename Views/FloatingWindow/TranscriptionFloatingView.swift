@@ -629,8 +629,6 @@ struct TranscriptionFloatingView: View {
     private var isFloatingStyle: Bool { appState.panelStyle == .floating }
     private var panelCornerRadius: CGFloat { isFloatingStyle ? 12 : 0 }
 
-    @State private var translationExpanded = false
-
     @ViewBuilder
     private var panelBackground: some View {
         PanelSurface(opaque: true)  // text panels stay opaque in both styles
@@ -917,7 +915,6 @@ struct TranscriptionFloatingView: View {
     private var translationControlsView: some View {
         // Don't show translation controls when recording or transcribing
         if !isBusy {
-            TranslationDisclosureRow(isExpanded: $translationExpanded) {
             TranslationControls(
                 appState: appState,
                 text: displayTextForTranslation,
@@ -925,7 +922,7 @@ struct TranscriptionFloatingView: View {
                     editedText = translatedText
                 }
             )
-            }
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             .padding(.vertical, 2)
         }
     }

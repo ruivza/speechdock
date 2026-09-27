@@ -526,8 +526,6 @@ struct TTSFloatingView: View {
     private var isFloatingStyle: Bool { appState.panelStyle == .floating }
     private var panelCornerRadius: CGFloat { isFloatingStyle ? 12 : 0 }
 
-    @State private var translationExpanded = false
-
     @ViewBuilder
     private var panelBackground: some View {
         PanelSurface(opaque: true)  // text panels stay opaque in both styles
@@ -942,7 +940,6 @@ struct TTSFloatingView: View {
     private var translationControlsView: some View {
         let isActive = appState.ttsState == .speaking || appState.ttsState == .loading
         if !isActive {
-            TranslationDisclosureRow(isExpanded: $translationExpanded) {
             TranslationControls(
                 appState: appState,
                 text: displayText,
@@ -951,7 +948,7 @@ struct TTSFloatingView: View {
                 },
                 applySameLanguageGuard: false
             )
-            }
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             .padding(.vertical, 2)
         }
     }

@@ -103,7 +103,7 @@
 "No languages available" = "没有可用的语言";
 
 /* ===== Translation Controls ===== */
-"Translate" = "翻译";
+"Translate" = "开始翻译";
 "Original" = "原文";
 "Translating..." = "翻译中...";
 "Select..." = "选择...";
@@ -528,5 +528,4 @@
 "On-device speech recognition (macOS 26+)" = "设备端语音识别（macOS 26 及以上）";
 
 /* Translation row */
-"Hide translation controls" = "隐藏翻译控件";
-"Show translation controls" = "显示翻译控件";
+"Translation:" = "翻译:";

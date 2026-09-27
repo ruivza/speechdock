@@ -103,7 +103,7 @@
 "No languages available" = "사용 가능한 언어가 없습니다";
 
 /* ===== Translation Controls ===== */
-"Translate" = "번역";
+"Translate" = "번역하기";
 "Original" = "원문";
 "Translating..." = "번역 중...";
 "Select..." = "선택...";
@@ -529,5 +529,4 @@
 "On-device speech recognition (macOS 26+)" = "기기 내 음성 인식(macOS 26 이상)";
 
 /* Translation row */
-"Hide translation controls" = "번역 컨트롤 숨기기";
-"Show translation controls" = "번역 컨트롤 표시";
+"Translation:" = "번역:";

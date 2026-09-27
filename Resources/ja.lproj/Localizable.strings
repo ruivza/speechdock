@@ -103,7 +103,7 @@
 "No languages available" = "利用可能な言語がありません";
 
 /* ===== Translation Controls ===== */
-"Translate" = "翻訳";
+"Translate" = "翻訳する";
 "Original" = "原文";
 "Translating..." = "翻訳中...";
 "Select..." = "選択...";
@@ -544,5 +544,4 @@
 "On-device speech recognition (macOS 26+)" = "デバイス内での音声認識（macOS 26以降）";
 
 /* Translation row */
-"Hide translation controls" = "翻訳の操作を隠す";
-"Show translation controls" = "翻訳の操作を表示";
+"Translation:" = "翻訳:";

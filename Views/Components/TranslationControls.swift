@@ -72,14 +72,10 @@ struct TranslationControls: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Translate/Original/Translating button
-            if isTranslated {
-                originalButton
-            } else if isTranslating {
-                translatingIndicator
-            } else {
-                translateButton
-            }
+            Text("Translation:")
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .fixedSize()
 
             // Language selector (always visible, separate from translate action)
             languageSelector
@@ -96,6 +92,15 @@ struct TranslationControls: View {
             // Model selector (only for non-macOS providers)
             if !isMacOSProvider {
                 modelSelector
+            }
+
+            // Translate/Original/Translating button, after the settings it uses
+            if isTranslated {
+                originalButton
+            } else if isTranslating {
+                translatingIndicator
+            } else {
+                translateButton
             }
         }
         .padding(.horizontal, 4)
@@ -122,10 +127,10 @@ struct TranslationControls: View {
                     .font(.callout.weight(.medium))
             }
             .fixedSize()
-            .foregroundColor(canTranslate ? .secondary : .secondary.opacity(0.4))
+            .foregroundColor(canTranslate ? .accentColor : .secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(Color.secondary.opacity(canTranslate ? 0.1 : 0.05))
+            .background(canTranslate ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.1))
             .cornerRadius(4)
         }
         .buttonStyle(.plain)
@@ -427,41 +432,6 @@ struct TranslationControls: View {
         WindowPresentation.alert(alert) { response in
             if response == .alertFirstButtonReturn { openSystemSettings() }
         }
-    }
-}
-
-/// Collapsible translation row: the "Translation" toggle and, when expanded,
-/// the controls on the same line (no separate header row).
-struct TranslationDisclosureRow<Content: View>: View {
-    @Binding var isExpanded: Bool
-    @ViewBuilder var content: () -> Content
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { isExpanded.toggle() }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    Text("Translation")
-                        .font(.callout)
-                }
-                .foregroundStyle(.secondary)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
-            .help(isExpanded ? NSLocalizedString("Hide translation controls", comment: "Translation row") : NSLocalizedString("Show translation controls", comment: "Translation row"))
-
-            if isExpanded {
-                content()
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(minHeight: 28)
     }
 }
 

@@ -71,8 +71,8 @@ final class GrokTTS: NSObject, TTSService {
             throw TTSError.noTextProvided
         }
 
-        guard let apiKey = apiKeyManager.getAPIKey(for: .grok) else {
-            throw TTSError.apiError("Grok API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .grok) else {
+            throw TTSError.apiError(apiKeyManager.unavailableReason(for: .grok))
         }
 
         stop()

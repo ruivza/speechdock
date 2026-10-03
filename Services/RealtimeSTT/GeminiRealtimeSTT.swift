@@ -57,8 +57,8 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
     private let maxReconnectAttempts = 3
 
     func startListening() async throws {
-        guard let apiKey = apiKeyManager.getAPIKey(for: .gemini) else {
-            throw RealtimeSTTError.apiError("Gemini API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .gemini) else {
+            throw RealtimeSTTError.apiError(apiKeyManager.unavailableReason(for: .gemini))
         }
 
         // Stop any existing session
@@ -309,6 +309,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
+                    self.apiKeyManager.noteHandshake(of: task, provider: .gemini)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
                         dprint("GeminiRealtimeSTT: WebSocket receive error: \(error)")
@@ -365,8 +366,8 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
         guard generation == connectionGeneration, isListening, !isIntentionallyStopping else { return }
 
         do {
-            guard let apiKey = apiKeyManager.getAPIKey(for: .gemini) else {
-                throw RealtimeSTTError.apiError("API key not available")
+            guard let apiKey = await apiKeyManager.apiKey(for: .gemini) else {
+                throw RealtimeSTTError.apiError(apiKeyManager.unavailableReason(for: .gemini))
             }
             try await connectWebSocket(apiKey: apiKey)
             guard generation == connectionGeneration, !Task.isCancelled else { return }

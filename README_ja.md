@@ -176,7 +176,7 @@ brew upgrade --cask speechdock
    - **ElevenLabs**: [ElevenLabs Settings](https://elevenlabs.io/app/settings/api-keys)
    - **Grok (xAI)**: [xAI Console](https://console.x.ai/)
 
-APIキーはmacOSキーチェーンに安全に保存されます。
+APIキーはmacOSキーチェーンに安全に保存されます。各欄には 1Password の参照（`op://保管庫/項目/フィールド`）も書けます。1Password CLI で読み込みます。詳しくは [高度な機能](https://yohasebe.github.io/speechdock/advanced_ja.html#1password-references) を参照してください。環境変数も使えます（`OPENAI_API_KEY`、`GEMINI_API_KEY`、`ELEVENLABS_API_KEY`、`XAI_API_KEY`。古い名前の `GROK_API_KEY` も受け付けます）。
 
 保存した翻訳プロバイダが使えない場合は、パネルと字幕の表示・翻訳動作を同じ利用可能なプロバイダに切り替え、「API キー未設定」などの理由を表示します。macOS 翻訳ではクラウドモデル欄を表示しません。保存したプロバイダの設定は維持します。
 

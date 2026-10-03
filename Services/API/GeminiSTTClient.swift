@@ -17,8 +17,8 @@ final class GeminiSTTClient: STTAPIClient {
         language: String?,
         originalExtension: String? = nil
     ) async throws -> TranscriptionResult {
-        guard let apiKey = apiKeyManager.getAPIKey(for: .gemini) else {
-            throw STTError.invalidAPIKey
+        guard let apiKey = await apiKeyManager.apiKey(for: .gemini) else {
+            throw STTError.apiError(apiKeyManager.unavailableReason(for: .gemini))
         }
 
         let base64Audio = audioData.base64EncodedString()

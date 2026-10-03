@@ -24,9 +24,19 @@ To use cloud providers, configure API keys in **Settings** > **API Keys**:
 | **OpenAI** | [OpenAI Platform](https://platform.openai.com/api-keys) | `OPENAI_API_KEY` |
 | **Google Gemini** | [Google AI Studio](https://aistudio.google.com/apikey) | `GEMINI_API_KEY` |
 | **ElevenLabs** | [ElevenLabs Settings](https://elevenlabs.io/app/settings/api-keys) | `ELEVENLABS_API_KEY` |
-| **Grok (xAI)** | [xAI Console](https://console.x.ai/) | `GROK_API_KEY` |
+| **Grok (xAI)** | [xAI Console](https://console.x.ai/) | `XAI_API_KEY` (`GROK_API_KEY` also accepted) |
 
-API keys are securely stored in macOS Keychain. Alternatively, you can set environment variables for development.
+API keys are securely stored in macOS Keychain. Alternatively, you can set environment variables for development. Grok also accepts the older name `GROK_API_KEY`; `XAI_API_KEY` is used when both are set, and saving a Grok key in Settings stores it as `XAI_API_KEY` and removes the item saved under the older name.
+
+### 1Password References
+{: #1password-references }
+
+Instead of the key itself, a field (or an environment variable) can hold a 1Password secret reference such as `op://Private/OpenAI/credential`. SpeechDock reads it with the [1Password CLI](https://developer.1password.com/docs/cli/) (`op`), found on your `PATH`, in `/opt/homebrew/bin` or in `/usr/local/bin`.
+
+- Only the reference is stored in the Keychain. The value it reads to stays in SpeechDock's memory until it quits and is never written to disk or logs.
+- All references are read together, with one approval, when **Settings** > **API Keys** opens or when a key is first needed. Starting SpeechDock (for example at login) does not ask for approval.
+- If a reference cannot be read (op not installed, not signed in, approval declined, item not found), that provider is treated as having no key, and Settings shows the reason. Use **Reload from 1Password** to try again; a declined approval is not asked again until you do.
+- If a provider rejects a key read from a reference (HTTP 401 or 403), the reference is read again the next time the key is used, once.
 
 ## Cloud STT Providers
 

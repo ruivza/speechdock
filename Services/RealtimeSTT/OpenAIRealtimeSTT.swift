@@ -93,8 +93,8 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
     private var sessionGeneration = UUID()
 
     func startListening() async throws {
-        guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
-            throw RealtimeSTTError.apiError("OpenAI API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .openAI) else {
+            throw RealtimeSTTError.apiError(apiKeyManager.unavailableReason(for: .openAI))
         }
 
         // Stop any existing session
@@ -425,6 +425,7 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
+                    self.apiKeyManager.noteHandshake(of: task, provider: .openAI)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
                         dprint("OpenAIRealtimeSTT: WebSocket receive error: \(error)")
@@ -476,8 +477,8 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
         guard generation == connectionGeneration, isListening, !isIntentionallyStopping, !Task.isCancelled else { return }
 
         do {
-            guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
-                throw RealtimeSTTError.apiError("API key not available")
+            guard let apiKey = await apiKeyManager.apiKey(for: .openAI) else {
+                throw RealtimeSTTError.apiError(apiKeyManager.unavailableReason(for: .openAI))
             }
             try await connectWebSocket(apiKey: apiKey)
             guard generation == connectionGeneration, !Task.isCancelled else { return }

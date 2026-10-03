@@ -93,8 +93,8 @@ final class OpenAITTS: NSObject, TTSService {
             throw TTSError.noTextProvided
         }
 
-        guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
-            throw TTSError.apiError("OpenAI API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .openAI) else {
+            throw TTSError.apiError(apiKeyManager.unavailableReason(for: .openAI))
         }
 
         stop()
@@ -154,6 +154,7 @@ final class OpenAITTS: NSObject, TTSService {
             throw TTSError.apiError("Invalid response type")
         }
 
+        APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: "OpenAI")
         guard httpResponse.statusCode == 200 else {
             streamingPlayer.stop()
             // Try to read error message

@@ -90,8 +90,8 @@ final class ElevenLabsTTS: NSObject, TTSService {
             throw TTSError.noTextProvided
         }
 
-        guard let apiKey = apiKeyManager.getAPIKey(for: .elevenLabs) else {
-            throw TTSError.apiError("ElevenLabs API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .elevenLabs) else {
+            throw TTSError.apiError(apiKeyManager.unavailableReason(for: .elevenLabs))
         }
 
         stop()
@@ -164,6 +164,7 @@ final class ElevenLabsTTS: NSObject, TTSService {
             throw TTSError.apiError("Invalid response type")
         }
 
+        APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: "ElevenLabs")
         guard httpResponse.statusCode == 200 else {
             streamingPlayer.stop()
             // Try to read error message
@@ -374,8 +375,14 @@ final class ElevenLabsTTS: NSObject, TTSService {
     // MARK: - Voice Fetching
 
     /// Fetch voices from ElevenLabs API and update cache
-    static func fetchAndCacheVoices() async {
-        guard let apiKey = APIKeyManager.shared.getAPIKey(for: .elevenLabs) else {
+    /// - Parameter readingReference: read a 1Password reference if needed.
+    ///   False for the background refresh at launch, so starting the app
+    ///   never asks for 1Password approval.
+    static func fetchAndCacheVoices(readingReference: Bool = false) async {
+        let key = readingReference
+            ? await APIKeyManager.shared.apiKey(for: .elevenLabs)
+            : APIKeyManager.shared.getAPIKey(for: .elevenLabs)
+        guard let apiKey = key else {
             dprint("ElevenLabs: No API key for voice fetching")
 
             return

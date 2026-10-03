@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- API key fields and environment variables accept 1Password references (`op://vault/item/field`), read with the 1Password CLI when Settings opens or a key is first needed. Only the reference is stored; the value stays in memory.
+
+### Changed
+- Grok uses `XAI_API_KEY`. The older `GROK_API_KEY` is still read; saving a Grok key in Settings stores it under the new name and removes the old item.
+
 ## [0.1.39] - 2026-09-27
 
 ### Added

@@ -13,7 +13,7 @@ enum STTProvider: String, CaseIterable, Identifiable, Codable {
         case .openAI: return "OPENAI_API_KEY"
         case .gemini: return "GEMINI_API_KEY"
         case .elevenLabs: return "ELEVENLABS_API_KEY"
-        case .grok: return "GROK_API_KEY"
+        case .grok: return "XAI_API_KEY"  // GROK_API_KEY is still read (APIKeyManager.keyNameAliases)
         }
     }
 

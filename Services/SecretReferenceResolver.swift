@@ -1,0 +1,421 @@
+import Foundation
+
+/// 1Password secret references (`op://vault/item/field`) that may stand in
+/// for an API key, in the keychain or in an environment variable.
+enum SecretReference {
+    static let prefix = "op://"
+
+    static func isReference(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(prefix)
+    }
+
+    /// `op://vault/item/field` or `op://vault/item/section/field`. Whitespace
+    /// and braces are rejected: the reference goes into an `op inject` template.
+    static func isWellFormed(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(prefix) else { return false }
+        if trimmed.unicodeScalars.contains(where: { CharacterSet.whitespacesAndNewlines.contains($0) || $0 == "{" || $0 == "}" }) {
+            return false
+        }
+        let parts = trimmed.dropFirst(prefix.count).split(separator: "/", omittingEmptySubsequences: false)
+        return (3...4).contains(parts.count) && parts.allSatisfy { !$0.isEmpty }
+    }
+}
+
+/// Why a reference could not be read. Only this code is shown or logged:
+/// the reference names a vault and an item, and op's own messages can repeat it.
+enum SecretReferenceFailure: String, Error, Equatable, Sendable {
+    case opMissing
+    case notSignedIn
+    case cancelled
+    case notFound
+    case timeout
+    case failed
+
+    var localizedDescription: String {
+        switch self {
+        case .opMissing:
+            return NSLocalizedString("1Password CLI (op) was not found", comment: "1Password reference failure")
+        case .notSignedIn:
+            return NSLocalizedString("1Password CLI is not signed in", comment: "1Password reference failure")
+        case .cancelled:
+            return NSLocalizedString("1Password access was not approved", comment: "1Password reference failure")
+        case .notFound:
+            return NSLocalizedString("1Password item was not found", comment: "1Password reference failure")
+        case .timeout:
+            return NSLocalizedString("1Password did not respond in time", comment: "1Password reference failure")
+        case .failed:
+            return NSLocalizedString("1Password reference could not be read", comment: "1Password reference failure")
+        }
+    }
+
+    /// A reason code for a failed op call, from its standard error.
+    static func classify(stderr: Data) -> SecretReferenceFailure {
+        let text = String(decoding: stderr, as: UTF8.self).lowercased()
+        let patterns: [(SecretReferenceFailure, String)] = [
+            (.notSignedIn, #"not (currently )?signed in|sign in|session expired|no accounts|locked"#),
+            (.cancelled, #"dismiss|cancel|denied|authorization"#),
+            (.notFound, #"isn't (an item|a vault|a field)|not found|could not find|no item|invalid secret reference|invalid reference"#)
+        ]
+        for (failure, pattern) in patterns where text.range(of: pattern, options: .regularExpression) != nil {
+            return failure
+        }
+        return .failed
+    }
+}
+
+struct OpRunResult: Sendable {
+    let status: Int32
+    let stdout: Data
+    let stderr: Data
+    let timedOut: Bool
+}
+
+/// Runs the op CLI. Replaced in tests.
+protocol OpRunning: Sendable {
+    func run(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) async -> OpRunResult
+}
+
+/// Runs op directly (no shell), with the template on stdin. The result is
+/// kept in memory only.
+struct ProcessOpRunner: OpRunning {
+    func run(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) async -> OpRunResult {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: Self.runBlocking(executable: executable, arguments: arguments,
+                                                                input: input, timeout: timeout))
+            }
+        }
+    }
+
+    private final class Box: @unchecked Sendable {
+        let lock = NSLock()
+        var stdout = Data()
+        var stderr = Data()
+        var timedOut = false
+    }
+
+    private static func runBlocking(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) -> OpRunResult {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        let stdinPipe = Pipe(), stdoutPipe = Pipe(), stderrPipe = Pipe()
+        process.standardInput = stdinPipe
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        do {
+            try process.run()
+        } catch {
+            return OpRunResult(status: -1, stdout: Data(), stderr: Data(), timedOut: false)
+        }
+
+        let box = Box()
+        let readers = DispatchGroup()
+        readers.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            box.lock.lock(); box.stdout = data; box.lock.unlock()
+            readers.leave()
+        }
+        readers.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            box.lock.lock(); box.stderr = data; box.lock.unlock()
+            readers.leave()
+        }
+
+        try? stdinPipe.fileHandleForWriting.write(contentsOf: input)
+        try? stdinPipe.fileHandleForWriting.close()
+
+        let timer = DispatchWorkItem {
+            box.lock.lock(); box.timedOut = true; box.lock.unlock()
+            process.terminate()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
+        process.waitUntilExit()
+        timer.cancel()
+        readers.wait()
+
+        box.lock.lock(); defer { box.lock.unlock() }
+        return OpRunResult(status: process.terminationStatus, stdout: box.stdout, stderr: box.stderr,
+                           timedOut: box.timedOut)
+    }
+}
+
+enum OpLocator {
+    /// A GUI app does not inherit the login shell's PATH, so the usual
+    /// install locations are tried as well. The override variable is honored
+    /// only in debug builds and tests, so a shipped app never hands secrets
+    /// to an executable named by its environment.
+    static func locate(environment: [String: String] = ProcessInfo.processInfo.environment,
+                       isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> URL? {
+        #if DEBUG
+        if let override = environment["SPEECHDOCK_OP_CLI"], !override.isEmpty {
+            return isExecutable(override) ? URL(fileURLWithPath: override) : nil
+        }
+        #endif
+        var directories = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
+        directories += ["/opt/homebrew/bin", "/usr/local/bin"]
+        var seen = Set<String>()
+        for directory in directories where seen.insert(directory).inserted {
+            let candidate = (directory as NSString).appendingPathComponent("op")
+            if isExecutable(candidate) { return URL(fileURLWithPath: candidate) }
+        }
+        return nil
+    }
+}
+
+/// Reads references with the op CLI and keeps the results in this process's
+/// memory until it quits. Results are never written to the keychain,
+/// defaults, files or logs, and neither is the reference text.
+///
+/// Reads are batched: the first read gathers every reference the app knows
+/// and reads them with one `op inject`, so 1Password asks at most once.
+final class SecretReferenceResolver: @unchecked Sendable {
+    enum State: Equatable {
+        case resolved(String)
+        case failed(SecretReferenceFailure)
+    }
+
+    static let opTimeout: TimeInterval = 120  // leaves time to answer a Touch ID prompt
+    /// A failed read (other than a cancelled approval) is tried again on a
+    /// later use, but not more often than this: subtitle translation asks
+    /// for the key once per sentence.
+    static let retryInterval: TimeInterval = 60
+
+    private let runner: OpRunning
+    private let locateOp: () -> URL?
+    private let onChange: @Sendable () -> Void
+    private let now: () -> Date
+
+    private let lock = NSLock()
+    private var states: [String: State] = [:]
+    private var failedAt: [String: Date] = [:]
+    /// References already read again after the provider rejected their value.
+    private var rereadAfterRejection: Set<String> = []
+    private var inFlight: Task<Void, Never>?
+
+    init(runner: OpRunning = ProcessOpRunner(),
+         locateOp: @escaping () -> URL? = { OpLocator.locate() },
+         onChange: @escaping @Sendable () -> Void = {},
+         now: @escaping () -> Date = Date.init) {
+        self.runner = runner
+        self.locateOp = locateOp
+        self.onChange = onChange
+        self.now = now
+    }
+
+    // MARK: - Synchronous reads (never start op)
+
+    func state(for reference: String) -> State? {
+        lock.lock(); defer { lock.unlock() }
+        return states[Self.key(reference)]
+    }
+
+    func cachedValue(for reference: String) -> String? {
+        if case .resolved(let value) = state(for: reference) { return value }
+        return nil
+    }
+
+    // MARK: - Reading
+
+    /// The value for `reference`, reading every reference in `batch` first
+    /// when it is not known yet. A reference whose approval was cancelled is
+    /// not asked again unless `force` is set.
+    func value(for reference: String, batch: [String], force: Bool = false) async -> Result<String, SecretReferenceFailure> {
+        let key = Self.key(reference)
+        let (current, failedTime) = snapshot(key)
+        if let current, !needsRead(current, failedAt: failedTime, force: force) {
+            return Self.result(of: current)
+        }
+        await read(Set(batch.map(Self.key)).union([key]), force: force)
+        return state(for: key).map(Self.result(of:)) ?? .failure(.failed)
+    }
+
+    /// Reads every reference that is not read yet (settings opened, reload).
+    func prepare(_ references: [String], force: Bool = false) async {
+        await read(Set(references.map(Self.key)), force: force)
+    }
+
+    /// Reads one reference on its own with `op read` (saving in Settings).
+    /// The value is cached on success, so using it does not ask again.
+    func readSingle(_ reference: String) async -> Result<String, SecretReferenceFailure> {
+        let key = Self.key(reference)
+        guard let op = locateOp() else { return .failure(.opMissing) }
+        let state = await readOne(key, op: op)
+        store([key: state])
+        return Self.result(of: state)
+    }
+
+    /// The provider rejected the value read from `reference` (HTTP 401/403).
+    /// The cached value is dropped once, so the next use reads it again;
+    /// returns whether it was dropped.
+    @discardableResult
+    func providerRejected(_ reference: String) -> Bool {
+        let key = Self.key(reference)
+        lock.lock()
+        guard case .resolved = states[key], !rereadAfterRejection.contains(key) else {
+            lock.unlock()
+            return false
+        }
+        states[key] = nil
+        rereadAfterRejection.insert(key)
+        lock.unlock()
+        onChange()
+        return true
+    }
+
+    /// Forget results for `reference` (a new reference was saved, or the user reloads).
+    func forget(_ reference: String) {
+        let key = Self.key(reference)
+        lock.lock()
+        states[key] = nil
+        failedAt[key] = nil
+        rereadAfterRejection.remove(key)
+        lock.unlock()
+        onChange()
+    }
+
+    // MARK: - Internals
+
+    private static func key(_ reference: String) -> String {
+        reference.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func result(of state: State) -> Result<String, SecretReferenceFailure> {
+        switch state {
+        case .resolved(let value): return .success(value)
+        case .failed(let failure): return .failure(failure)
+        }
+    }
+
+    private func snapshot(_ key: String) -> (State?, Date?) {
+        lock.lock(); defer { lock.unlock() }
+        return (states[key], failedAt[key])
+    }
+
+    /// Resolved values and cancelled approvals stay; other failures are read
+    /// again on a later use, at most once per retryInterval.
+    private func needsRead(_ state: State, failedAt: Date?, force: Bool) -> Bool {
+        switch state {
+        case .resolved: return false
+        case .failed(.cancelled): return force
+        case .failed:
+            if force { return true }
+            guard let failedAt else { return true }
+            return now().timeIntervalSince(failedAt) >= Self.retryInterval
+        }
+    }
+
+    private enum ReadStep {
+        case wait(Task<Void, Never>)
+        case run(Task<Void, Never>)
+        case done
+    }
+
+    /// One read at a time; a read that starts while another runs waits for
+    /// it and then reads whatever is still missing. Checking and starting
+    /// happen under one lock, so two callers never start op twice.
+    private func read(_ keys: Set<String>, force: Bool) async {
+        while true {
+            switch nextReadStep(keys, force: force) {
+            case .wait(let running):
+                await running.value
+            case .run(let task):
+                await task.value
+                return
+            case .done:
+                return
+            }
+        }
+    }
+
+    private func nextReadStep(_ keys: Set<String>, force: Bool) -> ReadStep {
+        lock.lock(); defer { lock.unlock() }
+        if let running = inFlight { return .wait(running) }
+        let missing = keys.filter { key in
+            guard let state = states[key] else { return true }
+            return needsRead(state, failedAt: failedAt[key], force: force)
+        }
+        if missing.isEmpty { return .done }
+        // The task clears inFlight itself; it cannot get the lock before
+        // this function has stored it.
+        let task = Task {
+            await self.readBatch(missing.sorted())
+            self.clearInFlight()
+        }
+        inFlight = task
+        return .run(task)
+    }
+
+    private func clearInFlight() {
+        lock.lock(); defer { lock.unlock() }
+        inFlight = nil
+    }
+
+    private func readBatch(_ keys: [String]) async {
+        guard !keys.isEmpty else { return }
+        guard let op = locateOp() else {
+            store(Dictionary(uniqueKeysWithValues: keys.map { ($0, State.failed(.opMissing)) }))
+            return
+        }
+
+        // Template lines are keyed by index, so the output maps back without
+        // repeating the reference.
+        let template = keys.enumerated().map { "K\($0.offset)={{ \($0.element) }}\n" }.joined()
+        let all = await runner.run(executable: op, arguments: ["inject"], input: Data(template.utf8),
+                                   timeout: Self.opTimeout)
+        if all.status == 0 && !all.timedOut {
+            var found: [String: State] = [:]
+            for line in String(decoding: all.stdout, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: true) {
+                guard let eq = line.firstIndex(of: "="), line.hasPrefix("K"),
+                      let index = Int(line[line.index(after: line.startIndex)..<eq]), keys.indices.contains(index) else { continue }
+                var value = String(line[line.index(after: eq)...])
+                if value.hasSuffix("\r") { value.removeLast() }
+                if !value.isEmpty { found[keys[index]] = .resolved(value) }
+            }
+            for key in keys where found[key] == nil { found[key] = .failed(.failed) }
+            store(found)
+            return
+        }
+        if all.timedOut {
+            store(Dictionary(uniqueKeysWithValues: keys.map { ($0, State.failed(.timeout)) }))
+            return
+        }
+        // inject fails as a whole when any reference fails; read each on its
+        // own to tell which failed and why. A cancelled approval stops here
+        // rather than asking once per key.
+        let batchFailure = SecretReferenceFailure.classify(stderr: all.stderr)
+        if batchFailure == .cancelled || batchFailure == .notSignedIn {
+            store(Dictionary(uniqueKeysWithValues: keys.map { ($0, State.failed(batchFailure)) }))
+            return
+        }
+        var results: [String: State] = [:]
+        for key in keys {
+            results[key] = await readOne(key, op: op)
+        }
+        store(results)
+    }
+
+    private func readOne(_ key: String, op: URL) async -> State {
+        let one = await runner.run(executable: op, arguments: ["read", "--no-newline", key], input: Data(),
+                                   timeout: Self.opTimeout)
+        if one.timedOut { return .failed(.timeout) }
+        if one.status == 0, !one.stdout.isEmpty {
+            return .resolved(String(decoding: one.stdout, as: UTF8.self))
+        }
+        return .failed(SecretReferenceFailure.classify(stderr: one.stderr))
+    }
+
+    private func store(_ results: [String: State]) {
+        lock.lock()
+        let stamp = now()
+        for (key, state) in results {
+            states[key] = state
+            if case .failed = state { failedAt[key] = stamp } else { failedAt[key] = nil }
+        }
+        lock.unlock()
+        onChange()
+    }
+}

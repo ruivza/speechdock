@@ -85,8 +85,8 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
     private var sessionGeneration = 0
 
     func startListening() async throws {
-        guard let apiKey = apiKeyManager.getAPIKey(for: .grok) else {
-            throw RealtimeSTTError.apiError("Grok API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .grok) else {
+            throw RealtimeSTTError.apiError(apiKeyManager.unavailableReason(for: .grok))
         }
 
         isIntentionallyStopping = false
@@ -349,6 +349,7 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
+                    self.apiKeyManager.noteHandshake(of: task, provider: .grok)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
                         dprint("GrokRealtimeSTT: WebSocket receive error: \(error)")
@@ -397,8 +398,8 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
         guard generation == connectionGeneration, isListening, !isIntentionallyStopping else { return }
 
         do {
-            guard let apiKey = apiKeyManager.getAPIKey(for: .grok) else {
-                throw RealtimeSTTError.apiError("API key not available")
+            guard let apiKey = await apiKeyManager.apiKey(for: .grok) else {
+                throw RealtimeSTTError.apiError(apiKeyManager.unavailableReason(for: .grok))
             }
             try await connectWebSocket(apiKey: apiKey)
             guard generation == connectionGeneration, !Task.isCancelled else { return }

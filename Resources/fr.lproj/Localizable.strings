@@ -530,3 +530,20 @@
 
 /* Translation row */
 "Translation:" = "Traduction :";
+
+/* API keys: 1Password references */
+"1Password CLI (op) was not found" = "1Password CLI (op) est introuvable";
+"1Password CLI is not signed in" = "1Password CLI n’est pas connecté";
+"1Password access was not approved" = "L’accès à 1Password n’a pas été approuvé";
+"1Password item was not found" = "L’élément 1Password est introuvable";
+"1Password did not respond in time" = "1Password n’a pas répondu à temps";
+"1Password reference could not be read" = "La référence 1Password n’a pas pu être lue";
+"%@ API key: %@" = "Clé API %1$@ : %2$@";
+"%@ API key not found" = "Clé API %@ introuvable";
+"Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain." = "Chaque champ accepte la clé elle-même ou une référence 1Password (op://coffre/élément/champ). Une référence est lue avec 1Password CLI (op) à l’ouverture des réglages ou à la première utilisation d’une clé ; seule la référence est enregistrée dans le trousseau.";
+"Reload from 1Password" = "Relire depuis 1Password";
+"From Environment (%@, older name)" = "Depuis l’environnement (%@, ancien nom)";
+"From Environment (%@)" = "Depuis l’environnement (%@)";
+"1Password: read" = "1Password : lue";
+"1Password: read when first used" = "1Password : lue à la première utilisation";
+"Use the form op://vault/item/field" = "Utilisez la forme op://coffre/élément/champ";

@@ -29,11 +29,11 @@ final class LLMTranslation: TranslationServiceProtocol {
 
         // Get API key
         guard let envKey = provider.envKeyName,
-              let apiKey = APIKeyManager.shared.getAPIKey(for: envKey),
+              let apiKey = await APIKeyManager.shared.apiKey(for: envKey),
               !apiKey.isEmpty else {
             dprint("LLMTranslation: No API key for \(provider.displayName)")
 
-            throw TranslationError.apiError("API key not configured for \(provider.displayName)")
+            throw TranslationError.apiError(APIKeyManager.shared.unavailableReason(for: provider.envKeyName ?? provider.displayName))
         }
 
         // Detect source language to check for same-language translation
@@ -108,12 +108,9 @@ final class LLMTranslation: TranslationServiceProtocol {
 
     func isAvailable(from sourceLanguage: LanguageCode?, to targetLanguage: LanguageCode) async -> Bool {
         // LLM providers support all languages
-        guard let envKey = provider.envKeyName,
-              let apiKey = APIKeyManager.shared.getAPIKey(for: envKey),
-              !apiKey.isEmpty else {
-            return false
-        }
-        return true
+        // Availability only: does not read a 1Password reference.
+        guard let envKey = provider.envKeyName else { return false }
+        return APIKeyManager.shared.hasAPIKey(for: envKey)
     }
 
     func cancel() {

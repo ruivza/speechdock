@@ -55,7 +55,7 @@ final class TranslationServiceTests: XCTestCase {
     func testTranslationProvider_EnvKeyName() {
         XCTAssertEqual(TranslationProvider.openAI.envKeyName, "OPENAI_API_KEY")
         XCTAssertEqual(TranslationProvider.gemini.envKeyName, "GEMINI_API_KEY")
-        XCTAssertEqual(TranslationProvider.grok.envKeyName, "GROK_API_KEY")
+        XCTAssertEqual(TranslationProvider.grok.envKeyName, "XAI_API_KEY")
         XCTAssertNil(TranslationProvider.macOS.envKeyName)
     }
 

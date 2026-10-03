@@ -26,7 +26,7 @@ class SpeakTextCommand: NSScriptCommand {
 
             if provider.requiresAPIKey {
                 guard let envKeyName = provider.envKeyName,
-                      APIKeyManager.shared.getAPIKey(for: envKeyName) != nil else {
+                      APIKeyManager.shared.hasAPIKey(for: envKeyName) else {
                     let envName = provider.envKeyName ?? "API_KEY"
                     self.setAppleScriptError(.apiKeyNotConfigured,
                         message: "No API key configured for \(provider.rawValue). Set the \(envName) environment variable or configure it in Settings.")
@@ -177,7 +177,7 @@ class SaveAudioCommand: NSScriptCommand {
 
             if provider.requiresAPIKey {
                 guard let envKeyName = provider.envKeyName,
-                      APIKeyManager.shared.getAPIKey(for: envKeyName) != nil else {
+                      APIKeyManager.shared.hasAPIKey(for: envKeyName) else {
                     let envName = provider.envKeyName ?? "API_KEY"
                     self.setAppleScriptError(.apiKeyNotConfigured,
                         message: "No API key configured for \(provider.rawValue). Set the \(envName) environment variable or configure it in Settings.")
@@ -319,7 +319,7 @@ class StartQuickTranscriptionCommand: NSScriptCommand {
             let provider = appState.selectedRealtimeProvider
             if provider.requiresAPIKey {
                 guard let envKeyName = provider.envKeyName,
-                      APIKeyManager.shared.getAPIKey(for: envKeyName) != nil else {
+                      APIKeyManager.shared.hasAPIKey(for: envKeyName) else {
                     let envName = provider.envKeyName ?? "API_KEY"
                     self.setAppleScriptError(.apiKeyNotConfigured,
                         message: "No API key configured for \(provider.rawValue). Set the \(envName) environment variable or configure it in Settings.")

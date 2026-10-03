@@ -63,8 +63,8 @@ final class GeminiTTS: NSObject, TTSService {
 
     func speak(text: String) async throws {
         guard !text.isEmpty else { throw TTSError.noTextProvided }
-        guard let apiKey = apiKeyManager.getAPIKey(for: .gemini) else {
-            throw TTSError.apiError("Gemini API key not found")
+        guard let apiKey = await apiKeyManager.apiKey(for: .gemini) else {
+            throw TTSError.apiError(apiKeyManager.unavailableReason(for: .gemini))
         }
         stop()
         selectedModel = GeminiTTSModels.resolvedID(selectedModel)

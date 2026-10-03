@@ -176,7 +176,7 @@ To use cloud providers, you need to configure API keys:
    - **ElevenLabs**: [ElevenLabs Settings](https://elevenlabs.io/app/settings/api-keys)
    - **Grok (xAI)**: [xAI Console](https://console.x.ai/)
 
-API keys are securely stored in macOS Keychain.
+API keys are securely stored in macOS Keychain. Each field also accepts a 1Password reference (`op://vault/item/field`), read with the 1Password CLI; see [Advanced Features](https://yohasebe.github.io/speechdock/advanced.html#1password-references). Environment variables work too (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `XAI_API_KEY`; the older `GROK_API_KEY` is still accepted).
 
 When the saved translation provider cannot be used, the panel and subtitles show and use the same available provider, with a short reason such as “API key not set.” macOS translation hides the cloud model selector. Your saved preference is retained.
 

@@ -530,3 +530,20 @@
 
 /* Translation row */
 "Translation:" = "번역:";
+
+/* API keys: 1Password references */
+"1Password CLI (op) was not found" = "1Password CLI(op)를 찾을 수 없습니다";
+"1Password CLI is not signed in" = "1Password CLI에 로그인되어 있지 않습니다";
+"1Password access was not approved" = "1Password 접근이 승인되지 않았습니다";
+"1Password item was not found" = "1Password 항목을 찾을 수 없습니다";
+"1Password did not respond in time" = "1Password가 제시간에 응답하지 않았습니다";
+"1Password reference could not be read" = "1Password 참조를 읽을 수 없습니다";
+"%@ API key: %@" = "%1$@ API 키: %2$@";
+"%@ API key not found" = "%@ API 키를 찾을 수 없습니다";
+"Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain." = "각 필드에는 키 자체나 1Password 참조(op://보관함/항목/필드)를 입력할 수 있습니다. 참조는 설정을 열 때나 키가 처음 필요할 때 1Password CLI(op)로 읽습니다. 키체인에는 참조만 저장됩니다.";
+"Reload from 1Password" = "1Password에서 다시 읽기";
+"From Environment (%@, older name)" = "환경 변수에서 (%@, 이전 이름)";
+"From Environment (%@)" = "환경 변수에서 (%@)";
+"1Password: read" = "1Password: 읽음";
+"1Password: read when first used" = "1Password: 처음 사용할 때 읽음";
+"Use the form op://vault/item/field" = "op://보관함/항목/필드 형식으로 입력하세요";

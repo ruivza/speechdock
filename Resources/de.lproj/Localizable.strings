@@ -530,3 +530,20 @@
 
 /* Translation row */
 "Translation:" = "Übersetzung:";
+
+/* API keys: 1Password references */
+"1Password CLI (op) was not found" = "1Password CLI (op) wurde nicht gefunden";
+"1Password CLI is not signed in" = "1Password CLI ist nicht angemeldet";
+"1Password access was not approved" = "Der Zugriff auf 1Password wurde nicht genehmigt";
+"1Password item was not found" = "Das 1Password-Objekt wurde nicht gefunden";
+"1Password did not respond in time" = "1Password hat nicht rechtzeitig geantwortet";
+"1Password reference could not be read" = "Die 1Password-Referenz konnte nicht gelesen werden";
+"%@ API key: %@" = "%1$@-API-Schlüssel: %2$@";
+"%@ API key not found" = "%@-API-Schlüssel nicht gefunden";
+"Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain." = "Jedes Feld akzeptiert den Schlüssel selbst oder eine 1Password-Referenz (op://Tresor/Objekt/Feld). Eine Referenz wird mit der 1Password CLI (op) gelesen, wenn die Einstellungen geöffnet werden oder ein Schlüssel zum ersten Mal benötigt wird; im Schlüsselbund wird nur die Referenz gespeichert.";
+"Reload from 1Password" = "Aus 1Password neu laden";
+"From Environment (%@, older name)" = "Aus Umgebung (%@, älterer Name)";
+"From Environment (%@)" = "Aus Umgebung (%@)";
+"1Password: read" = "1Password: gelesen";
+"1Password: read when first used" = "1Password: wird bei erster Verwendung gelesen";
+"Use the form op://vault/item/field" = "Verwenden Sie die Form op://Tresor/Objekt/Feld";

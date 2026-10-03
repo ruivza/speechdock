@@ -84,8 +84,7 @@ struct TranslationSettingsView: View {
         TranslationProvider.allCases.filter { provider in
             if !provider.requiresAPIKey { return provider.isAvailable }
             guard let envKey = provider.envKeyName else { return false }
-            let apiKey = APIKeyManager.shared.getAPIKey(for: envKey)
-            return apiKey != nil && !apiKey!.isEmpty
+            return APIKeyManager.shared.hasAPIKey(for: envKey)
         }
     }
 

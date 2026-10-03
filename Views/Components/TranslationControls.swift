@@ -345,7 +345,7 @@ struct TranslationControls: View {
     /// Check if API key is available for a provider
     private func hasAPIKey(for provider: TranslationProvider) -> Bool {
         guard let envKey = provider.envKeyName else { return true }
-        return APIKeyManager.shared.getAPIKey(for: envKey) != nil
+        return APIKeyManager.shared.hasAPIKey(for: envKey)
     }
 
     /// Check if provider is available (OS support + API key)

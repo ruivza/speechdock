@@ -26,9 +26,19 @@ lang: ja
 | **OpenAI** | [OpenAI Platform](https://platform.openai.com/api-keys) | `OPENAI_API_KEY` |
 | **Google Gemini** | [Google AI Studio](https://aistudio.google.com/apikey) | `GEMINI_API_KEY` |
 | **ElevenLabs** | [ElevenLabs Settings](https://elevenlabs.io/app/settings/api-keys) | `ELEVENLABS_API_KEY` |
-| **Grok (xAI)** | [xAI Console](https://console.x.ai/) | `GROK_API_KEY` |
+| **Grok (xAI)** | [xAI Console](https://console.x.ai/) | `XAI_API_KEY`（`GROK_API_KEY` も可） |
 
-APIキーはmacOSキーチェーンに安全に保存されます。開発時には環境変数を設定することもできます。
+APIキーはmacOSキーチェーンに安全に保存されます。開発時には環境変数を設定することもできます。Grok は古い名前の `GROK_API_KEY` も受け付けます。両方あるときは `XAI_API_KEY` を使います。設定画面で Grok のキーを保存すると `XAI_API_KEY` として保存し、古い名前で保存していた項目は削除します。
+
+### 1Password の参照
+{: #1password-references }
+
+キーそのものの代わりに、欄（または環境変数）に `op://Private/OpenAI/credential` のような 1Password の参照を書けます。SpeechDock は [1Password CLI](https://developer.1password.com/docs/cli/)（`op`）で読み込みます。`op` は `PATH`、`/opt/homebrew/bin`、`/usr/local/bin` から探します。
+
+- キーチェーンに保存されるのは参照だけです。読み込んだ値は SpeechDock の終了までメモリにだけ置き、ディスクやログには書きません。
+- 参照は、**設定** > **APIキー** を開いたときか、キーが初めて必要になったときに、まとめて読み込みます（承認は 1 回）。ログイン時などの起動だけでは承認を求めません。
+- 読み込めなかったとき（op が無い、サインインしていない、承認しなかった、項目が無い）は、そのプロバイダはキー未設定として扱い、設定画面に理由を表示します。**1Password から読み直す** で再試行できます。承認しなかった場合は、このボタンを押すまで再び求めません。
+- 参照から読み込んだキーをプロバイダが拒否したとき（HTTP 401 や 403）は、次にキーを使うときに 1 回だけ読み直します。
 
 ## クラウドSTTプロバイダ
 

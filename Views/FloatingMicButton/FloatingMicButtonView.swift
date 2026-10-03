@@ -216,7 +216,7 @@ struct FloatingMicButtonView: View {
 
     private func hasAPIKey(for provider: RealtimeSTTProvider) -> Bool {
         guard let envKeyName = provider.envKeyName else { return true }
-        return APIKeyManager.shared.getAPIKey(for: envKeyName) != nil
+        return APIKeyManager.shared.hasAPIKey(for: envKeyName)
     }
 }
 

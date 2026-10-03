@@ -14,8 +14,8 @@ final class ElevenLabsSTTClient: STTAPIClient {
         language: String?,
         originalExtension: String? = nil
     ) async throws -> TranscriptionResult {
-        guard let apiKey = apiKeyManager.getAPIKey(for: .elevenLabs) else {
-            throw STTError.invalidAPIKey
+        guard let apiKey = await apiKeyManager.apiKey(for: .elevenLabs) else {
+            throw STTError.apiError(apiKeyManager.unavailableReason(for: .elevenLabs))
         }
 
         let format = AudioFormatConverter.normalizeFormat(audioData, originalExtension: originalExtension)

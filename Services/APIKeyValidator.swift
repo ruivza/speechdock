@@ -12,6 +12,10 @@ struct APIKeyValidator {
         guard !trimmedKey.isEmpty else {
             return .invalid("Key is empty")
         }
+        // A 1Password reference is never sent; callers validate the value it reads to.
+        guard !SecretReference.isReference(trimmedKey) else {
+            return .invalid(NSLocalizedString("1Password reference could not be read", comment: "1Password reference failure"))
+        }
 
         switch provider {
         case .openAI:

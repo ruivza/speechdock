@@ -529,3 +529,20 @@
 
 /* Translation row */
 "Translation:" = "翻译:";
+
+/* API keys: 1Password references */
+"1Password CLI (op) was not found" = "未找到 1Password CLI（op）";
+"1Password CLI is not signed in" = "1Password CLI 未登录";
+"1Password access was not approved" = "未批准访问 1Password";
+"1Password item was not found" = "未找到 1Password 项目";
+"1Password did not respond in time" = "1Password 未及时响应";
+"1Password reference could not be read" = "无法读取 1Password 引用";
+"%@ API key: %@" = "%1$@ API 密钥：%2$@";
+"%@ API key not found" = "未找到 %@ API 密钥";
+"Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain." = "每个字段可以填写密钥本身，或 1Password 引用（op://保险库/项目/字段）。引用会在打开设置或首次需要密钥时，通过 1Password CLI（op）读取；钥匙串中只保存引用。";
+"Reload from 1Password" = "从 1Password 重新读取";
+"From Environment (%@, older name)" = "来自环境变量（%@，旧名称）";
+"From Environment (%@)" = "来自环境变量（%@）";
+"1Password: read" = "1Password：已读取";
+"1Password: read when first used" = "1Password：首次使用时读取";
+"Use the form op://vault/item/field" = "请使用 op://保险库/项目/字段 的格式";

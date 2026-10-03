@@ -14,8 +14,8 @@ final class OpenAISTTClient: STTAPIClient {
         language: String?,
         originalExtension: String? = nil
     ) async throws -> TranscriptionResult {
-        guard let apiKey = apiKeyManager.getAPIKey(for: .openAI) else {
-            throw STTError.invalidAPIKey
+        guard let apiKey = await apiKeyManager.apiKey(for: .openAI) else {
+            throw STTError.apiError(apiKeyManager.unavailableReason(for: .openAI))
         }
 
         let format = AudioFormatConverter.normalizeFormat(audioData, originalExtension: originalExtension)
@@ -135,6 +135,9 @@ enum STTAPIHelper {
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw STTError.networkError(URLError(.badServerResponse))
                 }
+
+                APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: providerName)
+
 
                 if httpResponse.statusCode == 200 {
                     return (data, httpResponse)

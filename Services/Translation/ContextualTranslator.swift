@@ -277,8 +277,8 @@ final class LLMContextualTranslator: ContextualTranslator {
     // MARK: - API Calls
 
     private func callOpenAI(prompt: String, targetLanguage: LanguageCode) async throws -> String {
-        guard let apiKey = APIKeyManager.shared.getAPIKey(for: "OPENAI_API_KEY") else {
-            throw TranslationError.apiError("OpenAI API key not found")
+        guard let apiKey = await APIKeyManager.shared.apiKey(for: "OPENAI_API_KEY") else {
+            throw TranslationError.apiError(APIKeyManager.shared.unavailableReason(for: "OPENAI_API_KEY"))
         }
 
         let modelId = model ?? provider.defaultModelId
@@ -321,8 +321,8 @@ final class LLMContextualTranslator: ContextualTranslator {
     }
 
     private func callGemini(prompt: String, targetLanguage: LanguageCode) async throws -> String {
-        guard let apiKey = APIKeyManager.shared.getAPIKey(for: "GEMINI_API_KEY") else {
-            throw TranslationError.apiError("Gemini API key not found")
+        guard let apiKey = await APIKeyManager.shared.apiKey(for: "GEMINI_API_KEY") else {
+            throw TranslationError.apiError(APIKeyManager.shared.unavailableReason(for: "GEMINI_API_KEY"))
         }
 
         let modelId = model ?? provider.defaultModelId
@@ -360,8 +360,8 @@ final class LLMContextualTranslator: ContextualTranslator {
     }
 
     private func callGrok(prompt: String, targetLanguage: LanguageCode) async throws -> String {
-        guard let apiKey = APIKeyManager.shared.getAPIKey(for: "GROK_API_KEY") else {
-            throw TranslationError.apiError("Grok API key not found")
+        guard let apiKey = await APIKeyManager.shared.apiKey(for: .grok) else {
+            throw TranslationError.apiError(APIKeyManager.shared.unavailableReason(for: .grok))
         }
 
         let modelId = model ?? provider.defaultModelId

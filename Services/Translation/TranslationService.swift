@@ -119,7 +119,7 @@ enum TranslationFactory {
         TranslationSelection.resolve(preferred: preferredProvider, target: targetLanguage,
                                      savedModel: savedModel, macOSAvailable: isMacOSTranslationAvailable) { provider in
             guard let key = provider.envKeyName else { return true }
-            return !(APIKeyManager.shared.getAPIKey(for: key) ?? "").isEmpty
+            return APIKeyManager.shared.hasAPIKey(for: key)
         }
     }
 
@@ -145,6 +145,9 @@ enum TranslationAPIHelper {
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw TranslationError.networkError("Invalid response")
                 }
+
+                APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: providerName)
+
 
                 if httpResponse.statusCode == 200 {
                     return (data, httpResponse)

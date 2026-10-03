@@ -30,7 +30,7 @@ enum TranslationProvider: String, CaseIterable, Identifiable, Codable {
         case .macOS: return nil  // No API key required
         case .openAI: return "OPENAI_API_KEY"
         case .gemini: return "GEMINI_API_KEY"
-        case .grok: return "GROK_API_KEY"
+        case .grok: return STTProvider.grok.envKeyName
         }
     }
 

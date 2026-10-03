@@ -1,0 +1,64 @@
+# Paths this repository may track. check_tracked_paths.rb fails when a tracked
+# file matches no line here, and when a line here matches no tracked file (so
+# a stale line cannot quietly widen what is allowed).
+#
+# Lines are File.fnmatch globs with FNM_PATHNAME | FNM_DOTMATCH: `*` stays
+# within one directory and also matches dotfiles, `**/` spans any depth.
+# `{a,b}` is expanded by the checker before matching, and every alternative
+# must match a tracked file.
+# Prefer a place and a file type over a single file; name a single file only
+# when it is the one file of its kind in that place. Markdown is always
+# named, including documentation pages.
+#
+# Adding a line is a decision about what may be published: this repository
+# is public, and the release build is made from a checkout of tracked files.
+
+# --- Repository root --------------------------------------------------------
+.gitignore
+.ruby-version
+CHANGELOG.md
+CONTRIBUTING.md
+ExportOptions.plist
+LICENSE
+README{,_ja}.md
+Rakefile
+VERSION
+appcast.xml
+project.yml
+
+# --- Repository tooling -----------------------------------------------------
+.github/FUNDING.yml
+.github/workflows/*.yml
+scripts/*.{sh,swift}
+scripts/hooks/pre-push
+scripts/lint/check_tracked_paths.rb
+scripts/lint/tracked_paths.allow
+
+# --- App sources and tests --------------------------------------------------
+App/*.swift
+Models/*.swift
+Services/**/*.swift
+Utilities/*.swift
+Views/**/*.swift
+Tests/*.swift
+
+# --- App resources ----------------------------------------------------------
+Resources/Info.plist
+Resources/SpeechDock.entitlements
+Resources/SpeechDock.sdef
+Resources/*.lproj/{InfoPlist,Localizable}.strings
+Resources/Assets.xcassets/Contents.json
+Resources/Assets.xcassets/{AppIcon.appiconset,MenuBarIcon.imageset}/Contents.json
+Resources/Assets.xcassets/AppIcon.appiconset/icon_*.png
+Resources/Assets.xcassets/MenuBarIcon.imageset/menubar*.png
+
+# --- README images ----------------------------------------------------------
+assets/{logo,social-preview}.png
+
+# --- Documentation site (GitHub Pages, Jekyll) ------------------------------
+docs/{.ruby-version,Gemfile,Gemfile.lock,_config.yml,favicon.ico}
+docs/_includes/head_custom.html
+docs/_sass/custom/custom.scss
+docs/{index,basics,advanced,applescript}{,_ja}.md
+docs/images/*.png
+docs/images/architecture.{drawio,svg}

@@ -551,6 +551,32 @@ namespace :prepare do
 end
 
 # ============================================================
+# Repository Checks
+# ============================================================
+
+namespace :lint do
+  desc "Check that every tracked file matches scripts/lint/tracked_paths.allow"
+  task :tracked_paths do
+    sh "ruby scripts/lint/check_tracked_paths.rb"
+  end
+end
+
+namespace :hooks do
+  desc "Link .git/hooks/pre-push to scripts/hooks/pre-push (checks each pushed commit)"
+  task :install do
+    git_dir = `git rev-parse --git-common-dir`.strip
+    abort "Not in a git repository" if git_dir.empty?
+    target = File.expand_path("scripts/hooks/pre-push")
+    link = File.join(git_dir, "hooks", "pre-push")
+    if File.exist?(link) && !(File.symlink?(link) && File.realpath(link) == File.realpath(target))
+      abort "#{link} already exists and is not this hook; move it aside first"
+    end
+    FileUtils.ln_sf(target, link)
+    puts "Installed #{link} -> #{target}"
+  end
+end
+
+# ============================================================
 # Development Tasks
 # ============================================================
 

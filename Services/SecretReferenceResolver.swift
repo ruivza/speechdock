@@ -31,6 +31,8 @@ enum SecretReferenceFailure: String, Error, Equatable, Sendable {
     case notFound
     case timeout
     case failed
+    /// Not of the form op://vault/item/field; never passed to op.
+    case malformed
 
     var localizedDescription: String {
         switch self {
@@ -46,6 +48,8 @@ enum SecretReferenceFailure: String, Error, Equatable, Sendable {
             return NSLocalizedString("1Password did not respond in time", comment: "1Password reference failure")
         case .failed:
             return NSLocalizedString("1Password reference could not be read", comment: "1Password reference failure")
+        case .malformed:
+            return NSLocalizedString("Use the form op://vault/item/field", comment: "1Password reference format")
         }
     }
 
@@ -242,6 +246,10 @@ final class SecretReferenceResolver: @unchecked Sendable {
     /// The value is cached on success, so using it does not ask again.
     func readSingle(_ reference: String) async -> Result<String, SecretReferenceFailure> {
         let key = Self.key(reference)
+        guard SecretReference.isWellFormed(key) else {
+            store([key: .failed(.malformed)])
+            return .failure(.malformed)
+        }
         guard let op = locateOp() else { return .failure(.opMissing) }
         let state = await readOne(key, op: op)
         store([key: state])
@@ -300,7 +308,7 @@ final class SecretReferenceResolver: @unchecked Sendable {
     private func needsRead(_ state: State, failedAt: Date?, force: Bool) -> Bool {
         switch state {
         case .resolved: return false
-        case .failed(.cancelled): return force
+        case .failed(.cancelled), .failed(.malformed): return force
         case .failed:
             if force { return true }
             guard let failedAt else { return true }
@@ -354,7 +362,16 @@ final class SecretReferenceResolver: @unchecked Sendable {
         inFlight = nil
     }
 
-    private func readBatch(_ keys: [String]) async {
+    private func readBatch(_ candidates: [String]) async {
+        // Only well-formed references reach op. A newline or braces in a
+        // reference from the environment or the keychain would otherwise add
+        // lines to the inject template (reading another reference, or
+        // shifting the K<n> mapping).
+        let malformed = candidates.filter { !SecretReference.isWellFormed($0) }
+        if !malformed.isEmpty {
+            store(Dictionary(uniqueKeysWithValues: malformed.map { ($0, State.failed(.malformed)) }))
+        }
+        let keys = candidates.filter { SecretReference.isWellFormed($0) }
         guard !keys.isEmpty else { return }
         guard let op = locateOp() else {
             store(Dictionary(uniqueKeysWithValues: keys.map { ($0, State.failed(.opMissing)) }))

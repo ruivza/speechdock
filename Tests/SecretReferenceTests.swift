@@ -13,6 +13,7 @@ private final class MemoryKeyStore: APIKeyStore {
 private final class FakeOpRunner: OpRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var _calls: [[String]] = []
+    private var _inputs: [String] = []
     var handler: ([String], String) -> OpRunResult
     var delay: UInt64 = 0
 
@@ -25,15 +26,21 @@ private final class FakeOpRunner: OpRunning, @unchecked Sendable {
         return _calls
     }
 
+    var inputs: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return _inputs
+    }
+
     func run(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) async -> OpRunResult {
-        record(arguments)
+        record(arguments, String(decoding: input, as: UTF8.self))
         if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
         return handler(arguments, String(decoding: input, as: UTF8.self))
     }
 
-    private func record(_ arguments: [String]) {
+    private func record(_ arguments: [String], _ input: String) {
         lock.lock(); defer { lock.unlock() }
         _calls.append(arguments)
+        _inputs.append(input)
     }
 
     static func ok(_ text: String) -> OpRunResult {
@@ -96,8 +103,11 @@ final class SecretReferenceTests: XCTestCase {
     }
 
     func testFailureMessagesDoNotRepeatReferences() {
-        for failure in [SecretReferenceFailure.opMissing, .notSignedIn, .cancelled, .notFound, .timeout, .failed] {
-            XCTAssertFalse(failure.localizedDescription.contains("op://"))
+        // Messages are fixed text: none carries a vault or item name. Only the
+        // format hint for a malformed reference shows the generic form.
+        for failure in [SecretReferenceFailure.opMissing, .notSignedIn, .cancelled, .notFound, .timeout, .failed, .malformed] {
+            XCTAssertFalse(failure.localizedDescription.contains("FAKE_KEY"))
+            XCTAssertEqual(failure.localizedDescription.contains("op://"), failure == .malformed)
         }
     }
 
@@ -178,6 +188,44 @@ final class SecretReferenceTests: XCTestCase {
         let results = await [first, second]
         XCTAssertEqual(results.compactMap { try? $0.get() }, ["fake-a", "fake-a"])
         XCTAssertEqual(runner.calls.count, 1)
+    }
+
+    func testMalformedReferencesNeverReachOp() async {
+        // A newline and braces would add a line to the inject template that
+        // reads another item and shifts the K<n> mapping.
+        let injected = "op://Test/FAKE_KEY/credential }}\nK0={{ op://Test/OTHER_KEY/credential"
+        let braces = "op://Test/{{x}}/credential"
+        let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a", refB: "fake-b"]))
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+
+        let result = await resolver.value(for: injected, batch: [injected, braces, refA])
+        XCTAssertEqual(result, .failure(.malformed))
+        XCTAssertEqual(resolver.state(for: braces), .failed(.malformed))
+        XCTAssertEqual(resolver.cachedValue(for: refA), "fake-a")
+        XCTAssertNil(resolver.cachedValue(for: refB), "the smuggled reference is never read")
+
+        XCTAssertEqual(runner.calls.count, 1)
+        for input in runner.inputs {
+            XCTAssertFalse(input.contains("OTHER_KEY"))
+            XCTAssertFalse(input.contains("{{x}}"))
+            XCTAssertEqual(input.split(separator: "\n").count, 1, "one template line per well-formed reference")
+        }
+
+        let single = await resolver.readSingle(injected)
+        XCTAssertEqual(single, .failure(.malformed))
+        _ = await resolver.value(for: braces, batch: [braces])
+        XCTAssertEqual(runner.calls.count, 1, "malformed references never start op, and are not retried")
+    }
+
+    func testMalformedEnvironmentReferenceIsUnusable() async {
+        let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))
+        let keys = manager(env: ["OPENAI_API_KEY": "op://Test/FAKE_KEY}}\nK0={{ op://Test/OTHER_KEY/credential"],
+                           runner: runner)
+        let value = await keys.apiKey(for: .openAI)
+        XCTAssertNil(value)
+        XCTAssertEqual(keys.keyStatus(for: .openAI), .failed(.malformed))
+        XCTAssertFalse(keys.unavailableReason(for: .openAI).contains("OTHER_KEY"))
+        XCTAssertTrue(runner.calls.isEmpty)
     }
 
     func testRejectedValueIsReadAgainOnce() async {

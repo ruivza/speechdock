@@ -59,9 +59,11 @@ struct APIKeySection: View {
                     .buttonStyle(.borderless)
                 }
 
-                HStack {
-                    keySourceBadge
+                // Status on its own rows, so long variable names and reasons
+                // are not squeezed beside the buttons.
+                keySourceBadge
 
+                HStack {
                     Spacer()
 
                     if isValidating {
@@ -113,7 +115,7 @@ struct APIKeySection: View {
     private var keySourceBadge: some View {
         let origin = apiKeyManager.keyOrigin(for: provider)
 
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             switch origin?.source ?? .none {
             case .environment:
                 Label(environmentLabel(origin), systemImage: "terminal")

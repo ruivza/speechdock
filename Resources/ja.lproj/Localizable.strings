@@ -562,3 +562,4 @@
 "1Password: read" = "1Password: 読み込み済み";
 "1Password: read when first used" = "1Password: 初めて使うときに読み込み";
 "Use the form op://vault/item/field" = "op://保管庫/項目/フィールド の形で入力してください";
+"1Password CLI (op) could not be verified" = "1Password CLI（op）の署名を確認できません";

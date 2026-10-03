@@ -115,7 +115,7 @@ final class SecretReferenceTests: XCTestCase {
 
     func testBatchReadUsesOneInject() async {
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a", refB: "fake-b"]))
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) })
 
         let a = await resolver.value(for: refA, batch: [refA, refB])
         XCTAssertEqual(try? a.get(), "fake-a")
@@ -129,7 +129,7 @@ final class SecretReferenceTests: XCTestCase {
 
     func testFailedInjectFallsBackToSingleReads() async {
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) })
 
         _ = await resolver.value(for: refA, batch: [refA, refB])
         XCTAssertEqual(resolver.cachedValue(for: refA), "fake-a")
@@ -139,7 +139,7 @@ final class SecretReferenceTests: XCTestCase {
 
     func testCancelledApprovalIsNotAskedAgainUnlessForced() async {
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"], injectError: "[ERROR] authorization prompt dismissed"))
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) })
 
         let first = await resolver.value(for: refA, batch: [refA, refB])
         XCTAssertEqual(first, .failure(.cancelled))
@@ -156,7 +156,7 @@ final class SecretReferenceTests: XCTestCase {
     func testOtherFailuresRetryAtMostOncePerInterval() async {
         var clock = Date(timeIntervalSince1970: 1_000)
         let runner = FakeOpRunner(handler: syntheticOp([:], injectError: "[ERROR] You are not currently signed in."))
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp }, now: { clock })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) }, now: { clock })
 
         _ = await resolver.value(for: refA, batch: [refA])
         _ = await resolver.value(for: refA, batch: [refA])
@@ -168,12 +168,12 @@ final class SecretReferenceTests: XCTestCase {
     }
 
     func testMissingOpAndTimeout() async {
-        let missing = SecretReferenceResolver(runner: FakeOpRunner(handler: syntheticOp([:])), locateOp: { nil })
+        let missing = SecretReferenceResolver(runner: FakeOpRunner(handler: syntheticOp([:])), locateOp: { .failure(.opMissing) })
         let none = await missing.value(for: refA, batch: [refA])
         XCTAssertEqual(none, .failure(.opMissing))
 
         let slow = FakeOpRunner { _, _ in OpRunResult(status: 15, stdout: Data(), stderr: Data(), timedOut: true) }
-        let timing = SecretReferenceResolver(runner: slow, locateOp: { fakeOp })
+        let timing = SecretReferenceResolver(runner: slow, locateOp: { .success(fakeOp) })
         let timedOut = await timing.value(for: refA, batch: [refA])
         XCTAssertEqual(timedOut, .failure(.timeout))
     }
@@ -181,7 +181,7 @@ final class SecretReferenceTests: XCTestCase {
     func testConcurrentReadsStartOpOnce() async {
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))
         runner.delay = 50_000_000
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) })
 
         async let first = resolver.value(for: refA, batch: [refA])
         async let second = resolver.value(for: refA, batch: [refA])
@@ -196,7 +196,7 @@ final class SecretReferenceTests: XCTestCase {
         let injected = "op://Test/FAKE_KEY/credential }}\nK0={{ op://Test/OTHER_KEY/credential"
         let braces = "op://Test/{{x}}/credential"
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a", refB: "fake-b"]))
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) })
 
         let result = await resolver.value(for: injected, batch: [injected, braces, refA])
         XCTAssertEqual(result, .failure(.malformed))
@@ -230,7 +230,7 @@ final class SecretReferenceTests: XCTestCase {
 
     func testRejectedValueIsReadAgainOnce() async {
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))
-        let resolver = SecretReferenceResolver(runner: runner, locateOp: { fakeOp })
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) })
         _ = await resolver.value(for: refA, batch: [refA])
 
         XCTAssertTrue(resolver.providerRejected(refA))
@@ -247,7 +247,7 @@ final class SecretReferenceTests: XCTestCase {
     private func manager(env: [String: String] = [:], store: MemoryKeyStore = MemoryKeyStore(),
                          runner: FakeOpRunner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))) -> APIKeyManager {
         APIKeyManager(keychain: store, environment: { env }, testModeNoAPIKeys: false,
-                      referenceResolver: SecretReferenceResolver(runner: runner, locateOp: { fakeOp }))
+                      referenceResolver: SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) }))
     }
 
     func testGrokUsesXAINameAndStillReadsGrokName() {
@@ -352,7 +352,7 @@ final class SecretReferenceTests: XCTestCase {
         store.items = ["OPENAI_API_KEY": refA]
         let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))
         let keys = APIKeyManager(keychain: store, environment: { [:] }, testModeNoAPIKeys: true,
-                                 referenceResolver: SecretReferenceResolver(runner: runner, locateOp: { fakeOp }))
+                                 referenceResolver: SecretReferenceResolver(runner: runner, locateOp: { .success(fakeOp) }))
         let value = await keys.apiKey(for: .openAI)
         XCTAssertNil(value)
         XCTAssertEqual(keys.keyStatus(for: .openAI), .notSet)
@@ -388,8 +388,8 @@ final class SecretReferenceTests: XCTestCase {
         """.write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
 
-        let located = OpLocator.locate(environment: ["SPEECHDOCK_OP_CLI": script.path])
-        XCTAssertEqual(located?.path, script.path)
+        let located = OpLocator.trustedOp(environment: ["SPEECHDOCK_OP_CLI": script.path])
+        XCTAssertEqual(try? located.get().path, script.path)
         let resolver = SecretReferenceResolver(runner: ProcessOpRunner(), locateOp: { located })
 
         let batch = await resolver.value(for: refA, batch: [refA])
@@ -400,6 +400,31 @@ final class SecretReferenceTests: XCTestCase {
         XCTAssertEqual(missing, .failure(.notFound))
     }
     #endif
+
+    func testUntrustedOpIsNotRun() async {
+        let runner = FakeOpRunner(handler: syntheticOp([refA: "fake-a"]))
+        let resolver = SecretReferenceResolver(runner: runner, locateOp: { .failure(.opUntrusted) })
+        let result = await resolver.value(for: refA, batch: [refA])
+        XCTAssertEqual(result, .failure(.opUntrusted))
+        let single = await resolver.readSingle(refA)
+        XCTAssertEqual(single, .failure(.opUntrusted))
+        XCTAssertTrue(runner.calls.isEmpty)
+    }
+
+    func testSignatureRequirement() throws {
+        // A system binary is validly signed but is not 1Password's op.
+        XCTAssertFalse(OpLocator.isTrusted(URL(fileURLWithPath: "/bin/ls")))
+        XCTAssertFalse(OpLocator.isTrusted(URL(fileURLWithPath: "/nonexistent/op")))
+        // The requirement itself is accepted by Security and matches its own subject.
+        XCTAssertTrue(OpLocator.isTrusted(URL(fileURLWithPath: "/bin/ls"),
+                                          requirementText: #"identifier "com.apple.ls" and anchor apple"#))
+
+        let installed = URL(fileURLWithPath: "/opt/homebrew/bin/op")
+        guard FileManager.default.isExecutableFile(atPath: installed.path) else {
+            throw XCTSkip("1Password CLI is not installed here")
+        }
+        XCTAssertTrue(OpLocator.isTrusted(installed.resolvingSymlinksInPath()))
+    }
 
     func testLocatorSearchesHomebrewPaths() {
         let found = OpLocator.locate(environment: ["PATH": "/usr/bin:/bin"],

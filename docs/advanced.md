@@ -37,6 +37,8 @@ Instead of the key itself, a field (or an environment variable) can hold a 1Pass
 - All references are read together, with one approval, when **Settings** > **API Keys** opens or when a key is first needed. Starting SpeechDock (for example at login) does not ask for approval.
 - If a reference cannot be read (op not installed, not signed in, approval declined, item not found), that provider is treated as having no key, and Settings shows the reason. Use **Reload from 1Password** to try again; a declined approval is not asked again until you do.
 - If a provider rejects a key read from a reference (HTTP 401 or 403), the reference is read again the next time the key is used, once.
+- SpeechDock runs `op` only if it is signed by 1Password; otherwise the reference fails with "1Password CLI (op) could not be verified".
+- `op` is started as its own process for macOS privacy purposes, as when you run it in a terminal, so it can reach the 1Password app. On a macOS version where this is not possible, references may fail with "not signed in".
 
 ## Cloud STT Providers
 

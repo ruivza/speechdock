@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// 1Password secret references (`op://vault/item/field`) that may stand in
 /// for an API key, in the keychain or in an environment variable.
@@ -33,6 +34,8 @@ enum SecretReferenceFailure: String, Error, Equatable, Sendable {
     case failed
     /// Not of the form op://vault/item/field; never passed to op.
     case malformed
+    /// An op was found but is not signed by 1Password; it is not run.
+    case opUntrusted
 
     var localizedDescription: String {
         switch self {
@@ -50,6 +53,8 @@ enum SecretReferenceFailure: String, Error, Equatable, Sendable {
             return NSLocalizedString("1Password reference could not be read", comment: "1Password reference failure")
         case .malformed:
             return NSLocalizedString("Use the form op://vault/item/field", comment: "1Password reference format")
+        case .opUntrusted:
+            return NSLocalizedString("1Password CLI (op) could not be verified", comment: "1Password reference failure")
         }
     }
 
@@ -82,6 +87,15 @@ protocol OpRunning: Sendable {
 
 /// Runs op directly (no shell), with the template on stdin. The result is
 /// kept in memory only.
+///
+/// op is spawned as its own responsible process. A child of SpeechDock would
+/// otherwise be held to SpeechDock's privacy permissions: reading the
+/// 1Password app's group container (where the CLI integration lives) counts
+/// as another developer's app data, which macOS denies without asking, and op
+/// then reports that it is not signed in. Disclaiming makes op (signed by
+/// 1Password) responsible for its own access, as it is when run from a
+/// terminal. The disclaim call is private API; when it cannot be found, op
+/// is spawned without it and may report not signed in.
 struct ProcessOpRunner: OpRunning {
     func run(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) async -> OpRunResult {
         await withCheckedContinuation { continuation in
@@ -92,6 +106,16 @@ struct ProcessOpRunner: OpRunning {
         }
     }
 
+    private typealias DisclaimFunction = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+
+    private static let disclaim: DisclaimFunction? = {
+        // RTLD_DEFAULT is (void *)-2 on Darwin.
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") else {
+            return nil
+        }
+        return unsafeBitCast(symbol, to: DisclaimFunction.self)
+    }()
+
     private final class Box: @unchecked Sendable {
         let lock = NSLock()
         var stdout = Data()
@@ -99,66 +123,120 @@ struct ProcessOpRunner: OpRunning {
         var timedOut = false
     }
 
-    private static func runBlocking(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) -> OpRunResult {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        let stdinPipe = Pipe(), stdoutPipe = Pipe(), stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+    private static func failure() -> OpRunResult {
+        OpRunResult(status: -1, stdout: Data(), stderr: Data(), timedOut: false)
+    }
 
-        do {
-            try process.run()
-        } catch {
-            return OpRunResult(status: -1, stdout: Data(), stderr: Data(), timedOut: false)
+    private static func runBlocking(executable: URL, arguments: [String], input: Data, timeout: TimeInterval) -> OpRunResult {
+        var stdinPipe: [Int32] = [-1, -1], stdoutPipe: [Int32] = [-1, -1], stderrPipe: [Int32] = [-1, -1]
+        guard pipe(&stdinPipe) == 0 else { return failure() }
+        guard pipe(&stdoutPipe) == 0 else {
+            stdinPipe.forEach { close($0) }
+            return failure()
+        }
+        guard pipe(&stderrPipe) == 0 else {
+            (stdinPipe + stdoutPipe).forEach { close($0) }
+            return failure()
+        }
+        // Writing after op has exited must not raise SIGPIPE in the app.
+        _ = fcntl(stdinPipe[1], F_SETNOSIGPIPE, 1)
+
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_adddup2(&actions, stdinPipe[0], STDIN_FILENO)
+        posix_spawn_file_actions_adddup2(&actions, stdoutPipe[1], STDOUT_FILENO)
+        posix_spawn_file_actions_adddup2(&actions, stderrPipe[1], STDERR_FILENO)
+
+        var attributes: posix_spawnattr_t?
+        posix_spawnattr_init(&attributes)
+        defer { posix_spawnattr_destroy(&attributes) }
+        // Only the three descriptors above reach op.
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_CLOEXEC_DEFAULT))
+        if let disclaim {
+            _ = disclaim(&attributes, 1)
+        }
+
+        let argv = ([executable.path] + arguments).map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+
+        var pid: pid_t = 0
+        let spawned = posix_spawn(&pid, executable.path, &actions, &attributes, argv, environ)
+        // The child holds its own copies now.
+        [stdinPipe[0], stdoutPipe[1], stderrPipe[1]].forEach { close($0) }
+        guard spawned == 0 else {
+            [stdinPipe[1], stdoutPipe[0], stderrPipe[0]].forEach { close($0) }
+            return failure()
         }
 
         let box = Box()
         let readers = DispatchGroup()
-        readers.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            box.lock.lock(); box.stdout = data; box.lock.unlock()
-            readers.leave()
-        }
-        readers.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            box.lock.lock(); box.stderr = data; box.lock.unlock()
-            readers.leave()
+        for (fd, isStdout) in [(stdoutPipe[0], true), (stderrPipe[0], false)] {
+            readers.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+                let data = handle.readDataToEndOfFile()
+                box.lock.lock()
+                if isStdout { box.stdout = data } else { box.stderr = data }
+                box.lock.unlock()
+                readers.leave()
+            }
         }
 
-        try? stdinPipe.fileHandleForWriting.write(contentsOf: input)
-        try? stdinPipe.fileHandleForWriting.close()
+        let writer = FileHandle(fileDescriptor: stdinPipe[1], closeOnDealloc: true)
+        try? writer.write(contentsOf: input)
+        try? writer.close()
 
         let timer = DispatchWorkItem {
             box.lock.lock(); box.timedOut = true; box.lock.unlock()
-            process.terminate()
+            kill(pid, SIGTERM)
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
-        process.waitUntilExit()
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) == -1 && errno == EINTR {}
         timer.cancel()
         readers.wait()
 
+        // WIFEXITED / WEXITSTATUS (macros are not available in Swift).
+        let exitCode: Int32 = (status & 0x7f) == 0 ? (status >> 8) & 0xff : -1
         box.lock.lock(); defer { box.lock.unlock() }
-        return OpRunResult(status: process.terminationStatus, stdout: box.stdout, stderr: box.stderr,
-                           timedOut: box.timedOut)
+        return OpRunResult(status: exitCode, stdout: box.stdout, stderr: box.stderr, timedOut: box.timedOut)
     }
 }
 
 enum OpLocator {
-    /// A GUI app does not inherit the login shell's PATH, so the usual
-    /// install locations are tried as well. The override variable is honored
-    /// only in debug builds and tests, so a shipped app never hands secrets
-    /// to an executable named by its environment.
-    static func locate(environment: [String: String] = ProcessInfo.processInfo.environment,
-                       isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> URL? {
+    /// op's own designated requirement (1Password CLI, Developer ID, team
+    /// 2BUA8C4S2C). Only an executable that meets it is run.
+    static let requirement = #"identifier "com.1password.op" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "2BUA8C4S2C""#
+
+    /// The op to run: found, with symbolic links resolved, and verified.
+    static func trustedOp(environment: [String: String] = ProcessInfo.processInfo.environment) -> Result<URL, SecretReferenceFailure> {
         #if DEBUG
+        // Tests and debug builds may name a synthetic op; it is not verified.
         if let override = environment["SPEECHDOCK_OP_CLI"], !override.isEmpty {
-            return isExecutable(override) ? URL(fileURLWithPath: override) : nil
+            return FileManager.default.isExecutableFile(atPath: override)
+                ? .success(URL(fileURLWithPath: override)) : .failure(.opMissing)
         }
         #endif
+        guard let found = locate(environment: environment) else { return .failure(.opMissing) }
+        let resolved = found.resolvingSymlinksInPath()
+        return isTrusted(resolved) ? .success(resolved) : .failure(.opUntrusted)
+    }
+
+    /// Whether the executable at `url` meets op's designated requirement.
+    static func isTrusted(_ url: URL, requirementText: String = requirement) -> Bool {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code else { return false }
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess,
+              let requirement else { return false }
+        return SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement) == errSecSuccess
+    }
+
+    /// A GUI app does not inherit the login shell's PATH, so the usual
+    /// install locations are tried as well.
+    static func locate(environment: [String: String] = ProcessInfo.processInfo.environment,
+                       isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> URL? {
         var directories = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
         directories += ["/opt/homebrew/bin", "/usr/local/bin"]
         var seen = Set<String>()
@@ -189,7 +267,7 @@ final class SecretReferenceResolver: @unchecked Sendable {
     static let retryInterval: TimeInterval = 60
 
     private let runner: OpRunning
-    private let locateOp: () -> URL?
+    private let locateOp: () -> Result<URL, SecretReferenceFailure>
     private let onChange: @Sendable () -> Void
     private let now: () -> Date
 
@@ -201,7 +279,7 @@ final class SecretReferenceResolver: @unchecked Sendable {
     private var inFlight: Task<Void, Never>?
 
     init(runner: OpRunning = ProcessOpRunner(),
-         locateOp: @escaping () -> URL? = { OpLocator.locate() },
+         locateOp: @escaping () -> Result<URL, SecretReferenceFailure> = { OpLocator.trustedOp() },
          onChange: @escaping @Sendable () -> Void = {},
          now: @escaping () -> Date = Date.init) {
         self.runner = runner
@@ -250,7 +328,11 @@ final class SecretReferenceResolver: @unchecked Sendable {
             store([key: .failed(.malformed)])
             return .failure(.malformed)
         }
-        guard let op = locateOp() else { return .failure(.opMissing) }
+        let op: URL
+        switch locateOp() {
+        case .success(let url): op = url
+        case .failure(let failure): return .failure(failure)
+        }
         let state = await readOne(key, op: op)
         store([key: state])
         return Self.result(of: state)
@@ -373,8 +455,11 @@ final class SecretReferenceResolver: @unchecked Sendable {
         }
         let keys = candidates.filter { SecretReference.isWellFormed($0) }
         guard !keys.isEmpty else { return }
-        guard let op = locateOp() else {
-            store(Dictionary(uniqueKeysWithValues: keys.map { ($0, State.failed(.opMissing)) }))
+        let op: URL
+        switch locateOp() {
+        case .success(let url): op = url
+        case .failure(let failure):
+            store(Dictionary(uniqueKeysWithValues: keys.map { ($0, State.failed(failure)) }))
             return
         }
 

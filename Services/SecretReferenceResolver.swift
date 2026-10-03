@@ -138,6 +138,12 @@ struct ProcessOpRunner: OpRunning {
             (stdinPipe + stdoutPipe).forEach { close($0) }
             return failure()
         }
+        // No other child the app starts meanwhile may inherit these ends; one
+        // holding the write end of stdin would keep op waiting for its end.
+        // The child's own copies come from the dup2 actions below.
+        for fd in stdinPipe + stdoutPipe + stderrPipe {
+            _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
+        }
         // Writing after op has exited must not raise SIGPIPE in the app.
         _ = fcntl(stdinPipe[1], F_SETNOSIGPIPE, 1)
 

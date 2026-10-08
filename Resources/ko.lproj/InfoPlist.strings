@@ -3,4 +3,6 @@
 "NSMicrophoneUsageDescription" = "SpeechDock은 음성 전사를 위해 마이크 접근 권한이 필요합니다.";
 "NSSpeechRecognitionUsageDescription" = "SpeechDock은 실시간 전사를 위해 음성 인식을 사용합니다.";
 "NSScreenCaptureUsageDescription" = "SpeechDock은 화면 텍스트 인식과 시스템 또는 앱 오디오 캡처를 위해 화면 기록 권한이 필요합니다.";
-"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved.";
+"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved. Fork modifications \U00A9 2026 ruivza.";
+
+/* Modified by ruivza: retain upstream copyright and add fork modifications. */

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # SpeechDock Build Script
 # This script builds the SpeechDock app for release
@@ -9,15 +9,28 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VERSION=$(cat "$PROJECT_DIR/VERSION")
 BUILD_DIR="$PROJECT_DIR/build"
 APP_NAME="SpeechDock"
+UNSIGNED=false
+case "${1:-}" in
+    --unsigned) UNSIGNED=true ;;
+    "") ;;
+    *) echo "Usage: bash scripts/build.sh [--unsigned]" >&2; exit 1 ;;
+esac
+if [ "$#" -gt 1 ]; then
+    echo "Usage: bash scripts/build.sh [--unsigned]" >&2
+    exit 1
+fi
 
-# CI supplies its public Team ID explicitly instead of inheriting an author's
-# identity from the generated project. Local builds use Signing.local.xcconfig.
+# Signed local builds use Signing.local.xcconfig or public identity selectors.
+# The unsigned CI mode overrides signing settings and uses no Apple account.
 SIGNING_SETTINGS=()
 if [ -n "${TEAM_ID:-}" ]; then
     SIGNING_SETTINGS+=("DEVELOPMENT_TEAM=$TEAM_ID")
 fi
 if [ -n "${SIGNING_IDENTITY:-}" ]; then
     SIGNING_SETTINGS+=("CODE_SIGN_IDENTITY=$SIGNING_IDENTITY")
+fi
+if [ "$UNSIGNED" = true ]; then
+    SIGNING_SETTINGS=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=)
 fi
 
 # Match Rake's allowlist: shell secrets must not enter Xcode build artifacts.
@@ -64,8 +77,25 @@ xcode_command xcodebuild -project "$PROJECT_DIR/$APP_NAME.xcodeproj" \
     "${SIGNING_SETTINGS[@]}" \
     archive
 
+if [ "$UNSIGNED" = true ]; then
+    # Package first so Actions preserves executable modes and framework links.
+    # Only the app and public provenance enter the artifact.
+    UNSIGNED_DIR="$BUILD_DIR/unsigned-release"
+    mkdir -p "$UNSIGNED_DIR"
+    ditto "$BUILD_DIR/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app" "$UNSIGNED_DIR/$APP_NAME.app"
+    python3 - "$UNSIGNED_DIR/release.json" "$VERSION" "$(git -C "$PROJECT_DIR" rev-parse HEAD)" <<'PY'
+import json
+import sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({"version": sys.argv[2], "commit": sys.argv[3]}, indent=2) + "\n")
+PY
+    ditto -c -k --sequesterRsrc "$UNSIGNED_DIR" "$BUILD_DIR/$APP_NAME-$VERSION-unsigned.zip"
+    echo "Unsigned build complete: $BUILD_DIR/$APP_NAME-$VERSION-unsigned.zip"
+    exit 0
+fi
+
 # Export settings are generated in the ignored build directory. Public signing
-# selectors can be supplied by CI without changing any tracked configuration.
+# selectors can be supplied locally without changing tracked configuration.
 EXPORT_OPTIONS="$BUILD_DIR/ExportOptions.plist"
 python3 - "$PROJECT_DIR/ExportOptions.plist" "$EXPORT_OPTIONS" "${TEAM_ID:-}" "${SIGNING_IDENTITY:-}" <<'PY'
 import plistlib

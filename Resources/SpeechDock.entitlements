@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!-- Modified by ruivza: remove updater-only sandbox exceptions. -->
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <true/>
@@ -10,12 +11,6 @@
     <true/>
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
-    <!-- Sparkle's documented sandbox installer connection names, scoped to this app. -->
-    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-    <array>
-        <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
-        <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
-    </array>
     <!-- Required for microphone access when signed with the Hardened
          Runtime (project.yml: ENABLE_HARDENED_RUNTIME = YES). This is a
          Hardened Runtime resource-access entitlement, not sandbox-only —

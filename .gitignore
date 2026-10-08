@@ -29,6 +29,7 @@ Package.resolved
 *.dmg
 *.pkg
 *.dSYM.zip
+SpeechDock-*-unsigned.zip
 *.dSYM
 
 # Secrets and signing

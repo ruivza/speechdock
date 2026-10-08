@@ -6,7 +6,7 @@ nav_order: 6
 
 # 编译与签名发布
 
-可以发布由自己的证书签名的版本，同时保持源码通用。签名包必然包含公开的 Team ID、证书和签名，源码只保存构建规则、占位符和更新验证公钥。
+可以发布由自己的证书签名的版本，同时保持源码通用。签名包必然包含公开的 Team ID、证书和签名，源码只保存构建规则与占位符。
 
 ## 本机 Debug
 
@@ -34,41 +34,49 @@ NOTARY_PROFILE=speechdock-release bash scripts/notarize.sh
 
 脚本生成 arm64、x86_64 通用 Release，在忽略的 `build/` 目录生成导出配置。可用 `SIGNING_IDENTITY` 指定本机证书名称或 SHA-1 指纹，源码无需修改。公证凭据通过钥匙串配置读取。
 
-## GitHub Release
+## GitHub 构建，本机签名与发布
 
-在本仓库 Settings → Secrets and variables → Actions 配置以下 repository secrets：
+GitHub Actions 只编译 arm64、x86_64 通用 Release，保存未签名的构建包，不创建 Release。Developer ID 私钥和公证凭据留在维护者的 Mac 钥匙串里。GitHub 不需要 Apple 证书、证书密码或公证 secrets。
 
-| Secret | 内容 |
-| --- | --- |
-| `CERTIFICATE_BASE64` | 包含 Developer ID Application 证书和私钥的 .p12 的 Base64 |
-| `CERTIFICATE_PASSWORD` | .p12 导出密码 |
-| `KEYCHAIN_PASSWORD` | CI 临时钥匙串密码 |
-| `TEAM_ID` | 与证书匹配的 Team ID |
-| `APPLE_ID` | 公证使用的 Apple Account |
-| `APP_PASSWORD` | 该账户的 app-specific password |
-| `SPARKLE_PRIVATE_KEY` | 与应用内 SUPublicEDKey 匹配的更新签名私钥 |
+### 本机一次性准备
 
-私钥、证书、密码禁止提交到 Git；不要把它们发到 issue、Wiki、聊天或构建日志。Actions 只在发布任务中导入临时钥匙串，构建环境不继承这些密钥，结束后清理。
-
-版本号在 `VERSION` 与 `project.yml` 的两个应用 target 中保持一致。检查完成后推送相同的 `vX.Y.Z` 标签才会触发发布，例如：
+安装自己的 Developer ID Application 证书及其私钥，以及 Xcode 命令行工具。证书无需导出成 .p12 或上传 GitHub。
 
 ```bash
-rake version:patch
-rake version:verify
-# 提交经过验证的版本修改，然后推送 main。
-git tag vX.Y.Z
-git push origin vX.Y.Z
+brew install gh
+gh auth login
+xcrun notarytool store-credentials speechdock-release
 ```
 
-把示例中的 X.Y.Z 换成 VERSION 的实际值。缺少 secrets、证书类型或 Team 不匹配、标签版本不匹配、签名或公证失败，流程都会停止。Release 成功创建后才把签名 appcast 提交到 main；不会更新原作者的 Homebrew tap。
+最后一个命令交互式保存公证凭据。它会询问 Apple Account、Team ID 和 app-specific password。发布脚本只读取钥匙串配置；不要把密码写进命令、源码或 GitHub。
 
-## Sparkle 更新签名
+如果本机只有一个有效的 Developer ID Application，脚本会自动选择它。存在多个证书时，用 `security find-identity -v -p codesigning` 查看公开的 SHA-1 指纹，并用 `SIGNING_IDENTITY` 指定完整证书名称或指纹。
 
-Developer ID 与 Sparkle 是两套用途不同的签名。仓库保留公开的 `SUPublicEDKey`，只有维护者持有的对应私钥能签名可安装的更新。CI 在发布前验证 DMG 签名与应用内公钥一致。
+DMG 使用 macOS 自带的 `hdiutil` 和 `ditto` 制作，包含应用和 Applications 快捷方式。只需安装 GitHub 官方的 `gh`；打包无需额外安装工具。
 
-使用校验过版本及 SHA-256 的 Sparkle 官方工具管理更新密钥。在本机钥匙串安全保存私钥；需要配置 CI 时由维护者通过工具导出到仓库外的位置，填入 `SPARKLE_PRIVATE_KEY` 并删除导出文件。不要随意生成另一个私钥来替代现有公钥的私钥；更换公钥涉及已有用户的更新信任迁移。
+### 每次发布
 
-钥匙串在读取私钥时可能要求本机登录钥匙串授权。源码整理和公开样本验证不需要读取这个私钥。密钥导出必须由维护者在自己的机器完成。
+本仓库独立维护版本号，无需跟随上游。新版本使用自己的发布记录和 `vX.Y.Z` 标签；保留已有更新历史，不替换旧标签。
+
+1. 保持 `VERSION` 与 `project.yml` 两个应用 target 的版本一致，提交并推送经过验证的修改。
+2. 推送匹配的 `vX.Y.Z` 标签，触发 **Build Release Artifact**。也可运行 `rake release:github`；已有标签不会被替换。
+3. 等待 Actions 成功，记下运行页面 URL 中 `/actions/runs/` 后的数字 RUN_ID。构建包保留 30 天，是维护者签名的输入，不供用户安装。
+4. 本机切换到该标签，执行发布脚本。
+
+```bash
+# 把 X.Y.Z 和 RUN_ID 换成实际版本与运行编号。
+git fetch origin tag vX.Y.Z
+git switch --detach vX.Y.Z
+NOTARY_PROFILE=speechdock-release bash scripts/release-local.sh --run RUN_ID --publish
+```
+
+脚本核对远端标签、构建提交和本机签名脚本版本，然后下载构建包，恢复可执行权限和框架符号链接。它分别签名嵌套代码、Voice Input 输入法与主应用，使用各自的权限配置，随后生成并签名 DMG，提交公证、附上票据，并检查签名与 Gatekeeper。全部成功才上传 DMG 和 SHA-256 校验文件到新 Release；不会覆盖已有 Release 或创建缺失的标签。
+
+去掉 `--publish` 可只生成本机安装包。等价 Rake 命令是 `NOTARY_PROFILE=speechdock-release PUBLISH=1 rake 'release:local[RUN_ID]'`。其他 fork 可使用 `--repo OWNER/REPO`。
+
+未签名 ZIP 位于 `build/SpeechDock-X.Y.Z-unsigned.zip`，正式 DMG 位于项目根目录。这些文件被 Git 忽略。本机完整编译仍可使用上一节的 `scripts/build.sh`；也可用 `bash scripts/build.sh --unsigned` 验证无证书构建。
+
+用户从本仓库 Releases 手动下载安装更新；应用不会自动检查或下载更新，也不会更新原作者的 Homebrew tap。
 
 ## Wiki 同步
 
@@ -81,6 +89,6 @@ python3 scripts/sync-wiki.py --repository ruivza/speechdock
 
 同步替换 Wiki 当前页面并引用原仓库；保留 Git 历史，不强制推送。
 
-参考：[GitHub macOS runner 证书配置](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications)、[Sparkle 发布指南](https://sparkle-project.org/documentation/)。
+参考：[Apple 分发签名](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac)、[GitHub 构建产物](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts)、[GitHub CLI Release](https://cli.github.com/manual/gh_release_create)。
 
 [首页](index.md) · 来源：[yohasebe/speechdock](https://github.com/yohasebe/speechdock)

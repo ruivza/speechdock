@@ -7,16 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
 ### Added
 - A separate sandboxed SpeechDock Voice Input method uses InputMethodKit to enter on-device dictation without Accessibility permission. Install it from the menu bar, select it in the macOS input menu, and press ⌃⌥R to start/finish or Esc to cancel. Changing the input destination cancels recording; input-method transcripts are never saved.
 
 ### Changed
+- This fork starts an independent version sequence at 0.2.0; existing changelog history is preserved.
 - Repository documentation and Wiki are rewritten for this fork, with upstream attribution and current permission, privacy and release instructions.
-- Release signing accepts local or CI-provided team and certificate selectors; shared source configuration contains no publisher's Apple identity. Universal exports use a generated, untracked signing configuration.
-- The fork release workflow no longer updates the upstream author's Homebrew tap, and publishes the release before advertising it in the update feed.
+- Release signing accepts local team and certificate selectors; shared source configuration contains no publisher's Apple identity. Universal exports use a generated, untracked signing configuration.
+- GitHub builds an unsigned universal artifact; the maintainer signs and notarizes it on their Mac before uploading a DMG to this repository's Releases. Apple signing keys and notarization credentials stay in the local Keychain, and releases do not update the upstream author's Homebrew tap.
 - Permission checks refresh microphone state on every request and verify ScreenCaptureKit access at capture entry, with current-app identity and recheck guidance.
 - Appearance settings offer six interface languages and cache clearing; Voice Input UI and missing interface strings are localized.
-- Updates use the ruivza/speechdock feed and its own Sparkle signing key; CI verifies the update signature against the embedded public key.
+- About identifies ruivza as the fork maintainer and Yoichiro Hasebe as the original author, with upstream source and license links. Distributed apps include LICENSE and NOTICE.
 - Debug signing uses automatic Apple Development signing; all targets share a Git-ignored local Team configuration. Release signing selects the publisher's Developer ID certificate instead of hardcoding the original author's identity.
 - API key settings accept literal keys only; URL values are rejected locally.
 - Grok uses `XAI_API_KEY`. The older `GROK_API_KEY` is still read; saving a Grok key in Settings stores it under the new name and removes the old item.
@@ -25,17 +28,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The main app also runs in App Sandbox. Recording panels and quick transcription copy results for manual paste; TTS reads copied text. Legacy Accessibility-based selection/insertion/window mutation and simulated key events are removed. The old AppleScript `paste text` command now returns copied-to-clipboard status.
 
 ### Removed
+- Removed Sparkle automatic updates, update menu actions, framework/configuration, installer sandbox exceptions, appcast, and update-signing release steps. Updates are installed manually from this fork's Releases.
+- Removed donation links, reminders, and their stored-state handling.
 - Removed the 1Password CLI integration and its private macOS API use.
 
 ### Security
 - Audio input/output device checks read only the returned stream-count header, avoiding out-of-bounds reads for zero-stream Core Audio configurations.
-- Sandbox file access uses system chooser grants; input-method installation asks for its destination directory. Sparkle uses its sandbox installer service with app-specific connection names. Existing preferences and app-support data migrate into the container on first launch.
+- Sandbox file access uses system chooser grants; input-method installation asks for its destination directory. Existing preferences and app-support data migrate into the container on first launch.
 - Transcription history can be disabled or cleared, and saved history uses owner-only file permissions. History remains unencrypted.
 - Audio file reads reject symlinks and non-regular files and enforce provider size limits through the same file descriptor.
 - Gemini network error logs omit credential-bearing URLs, and shell builds exclude unrelated environment secrets.
 - Native speech debug logs report text lengths instead of transcript contents, and cancellation during a speech permission prompt prevents delayed microphone startup.
 - Notarization uses Keychain credential profiles without passwords in command arguments.
-- Release actions use immutable commit references, Sparkle 2.9.6 signing tools are checksum-verified, and the documentation dependency Nokogiri is updated to 1.19.4.
+- Local release extraction rejects unsafe paths, symlink-chain escapes, duplicate destinations, and special files before unpacking a build artifact.
+- Release actions use immutable commit references, and the documentation dependency Nokogiri is updated to 1.19.4.
 
 ## [0.1.39] - 2026-09-27
 

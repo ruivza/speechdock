@@ -1,7 +1,7 @@
 import SwiftUI
 
+// Modified by ruivza: remove update/support actions and distinguish fork attribution.
 struct AboutSettingsView: View {
-    @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
     private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     private let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
 
@@ -22,9 +22,8 @@ struct AboutSettingsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            // Copyright
-            Text("\u{00A9} 2026 Yoichiro Hasebe")
-                .font(.caption2)
+            Text("Maintainer: ruivza")
+                .font(.caption)
                 .foregroundColor(.secondary)
 
             // Links
@@ -43,7 +42,7 @@ struct AboutSettingsView: View {
                 .buttonStyle(.link)
 
                 Button(action: {
-                    if let url = URL(string: "https://github.com/ruivza/speechdock") {
+                    if let url = URL(string: "https://github.com/ruivza/speechdock/wiki") {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
@@ -59,69 +58,34 @@ struct AboutSettingsView: View {
             Divider()
                 .frame(width: 200)
 
-            // Check for Updates
-            Button(action: {
-                sparkleUpdater.checkForUpdates()
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Check for Updates...")
-                }
-            }
-            .disabled(!sparkleUpdater.canCheckForUpdates)
-
-            Divider()
-                .frame(width: 200)
-
-            // Support Links
+            // Original copyright: © 2026 Yoichiro Hasebe, preserved in LICENSE and NOTICE.
+            // Credit the upstream author separately from fork maintenance.
             VStack(spacing: 6) {
-                Text(NSLocalizedString("Support Development", comment: "About view support section title"))
+                Text("Original author: Yoichiro Hasebe")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
                 HStack(spacing: 16) {
-                    Button(action: {
-                        if let url = URL(string: "https://github.com/sponsors/yohasebe") {
+                    Button {
+                        if let url = URL(string: "https://github.com/yohasebe/speechdock") {
                             NSWorkspace.shared.open(url)
                         }
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "heart.fill")
-                                .foregroundColor(.pink)
-                            Text("GitHub Sponsors")
-                        }
-                        .font(.caption)
+                    } label: {
+                        Text("Original Project")
                     }
                     .buttonStyle(.link)
 
-                    Button(action: {
-                        if let url = URL(string: "https://buymeacoffee.com/yohasebe") {
+                    Button {
+                        if let url = Bundle.main.url(forResource: "LICENSE", withExtension: nil) {
                             NSWorkspace.shared.open(url)
                         }
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "cup.and.saucer.fill")
-                                .foregroundColor(.orange)
-                            Text("Buy Me a Coffee")
-                        }
-                        .font(.caption)
-                    }
-                    .buttonStyle(.link)
-
-                    Button(action: {
-                        if let url = URL(string: "https://ko-fi.com/yohasebe") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "heart.circle.fill")
-                                .foregroundColor(.red)
-                            Text("Ko-fi")
-                        }
-                        .font(.caption)
+                    } label: {
+                        Text("Apache License 2.0")
                     }
                     .buttonStyle(.link)
                 }
+                .font(.caption)
+
             }
 
             Spacer()

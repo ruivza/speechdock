@@ -1,3 +1,4 @@
+// Modified by ruivza: remove the update menu action.
 import SwiftUI
 
 struct MenuBarView: View {
@@ -284,10 +285,6 @@ struct MenuBarView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(MenuBarActionButtonStyle())
-
-                // Check for Updates
-                CheckForUpdatesView()
-                    .buttonStyle(MenuBarActionButtonStyle())
 
                 // Help
                 Button(action: {

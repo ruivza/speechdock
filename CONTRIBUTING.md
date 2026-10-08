@@ -26,7 +26,7 @@ Tests can run with the command-line build settings `CODE_SIGNING_ALLOWED=NO CODE
 
 ## Releases
 
-The [Build and Release guide](https://github.com/ruivza/speechdock/wiki/Build-and-Release) covers Developer ID Application signing, notarization, and Sparkle update signatures. CI uses credentials from GitHub Secrets. Apple Account credentials must never be written into source. The Sparkle public key in the repository verifies updates and is safe to publish.
+The [Build and Release guide](https://github.com/ruivza/speechdock/wiki/Build-and-Release) covers Developer ID Application signing and notarization. CI builds unsigned artifacts without Apple credentials; the maintainer signs, notarizes, and publishes from a local Mac using its Keychain. Apple Account credentials must never be written into source. Users install updates manually from this fork's Releases; there is no automatic-update framework or update-signing key. Distributed apps include `LICENSE` and `NOTICE`, and the About page distinguishes the fork maintainer from the original author.
 
 ## Documentation and Wiki
 

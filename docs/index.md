@@ -21,9 +21,9 @@ SpeechDock 是 macOS 菜单栏语音工具，支持转录、朗读、实时字�
 
 ## 安装
 
-正式安装包从 [本仓库 Releases](https://github.com/ruivza/speechdock/releases) 获取。发布包需要维护者自己的 Developer ID Application 签名、公证和更新签名；没有发布包时可按编译指南本机构建。
+正式安装包从 [本仓库 Releases](https://github.com/ruivza/speechdock/releases) 获取。发布包需要维护者自己的 Developer ID Application 签名与公证；没有发布包时可按编译指南本机构建。
 
-原作者的 Homebrew tap 和旧安装包不代表此分支。应用更新检查只使用本仓库的 appcast；首个签名版本发布前，更新源没有可安装条目。
+原作者的 Homebrew tap 和旧安装包不代表此分支。更新需要从本仓库 Releases 手动下载并安装；应用不会自动检查或下载更新。
 
 ## 平台与语言
 

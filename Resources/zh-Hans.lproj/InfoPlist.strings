@@ -3,4 +3,6 @@
 "NSMicrophoneUsageDescription" = "SpeechDock 需要麦克风访问权限来录制您的语音以进行转录。";
 "NSSpeechRecognitionUsageDescription" = "SpeechDock 使用语音识别进行实时转录。";
 "NSScreenCaptureUsageDescription" = "SpeechDock 需要屏幕录制权限来识别屏幕文字以及捕获系统或应用音频。";
-"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved.";
+"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved. Fork modifications \U00A9 2026 ruivza.";
+
+/* Modified by ruivza: retain upstream copyright and add fork modifications. */

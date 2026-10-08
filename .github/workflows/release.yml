@@ -1,23 +1,26 @@
-name: Build and Release
+# Modified by ruivza: build on GitHub; sign, notarize, and publish on a local Mac.
+name: Build Release Artifact
 
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 concurrency:
-  group: speechdock-release
+  group: speechdock-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: macos-26
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Tracked files match the allow list
         run: ruby scripts/lint/check_tracked_paths.rb
@@ -27,7 +30,7 @@ jobs:
         with:
           xcode-version: '26.0'
 
-      - name: Get version
+      - name: Validate version and tag
         id: version
         run: |
           VERSION=$(cat VERSION)
@@ -36,202 +39,30 @@ jobs:
             echo "::error::The tag must match VERSION."
             exit 1
           }
+          ruby -ryaml -e 'v = File.read("VERSION").strip; p = YAML.load_file("project.yml"); abort "Target versions must match VERSION" unless %w[SpeechDock SpeechDockVoiceInput].all? { |t| s = p.fetch("targets").fetch(t).fetch("settings").fetch("base"); s.fetch("MARKETING_VERSION") == v && s.fetch("CURRENT_PROJECT_VERSION") == v }'
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Validate release secrets
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          for name in CERTIFICATE_BASE64 CERTIFICATE_PASSWORD KEYCHAIN_PASSWORD TEAM_ID APPLE_ID APP_PASSWORD SPARKLE_PRIVATE_KEY; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::Missing repository secret: $name"
-              exit 1
-            fi
-          done
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Install create-dmg and fileicon
-        run: brew install create-dmg fileicon
+      - name: Build unsigned universal app
+        run: bash scripts/build.sh --unsigned
 
-      - name: Import signing certificate
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-        run: |
-          umask 077
-          # Create variables
-          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          trap 'rm -f "$CERTIFICATE_PATH"' EXIT
-
-          # Decode certificate
-          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
-          unset CERTIFICATE_BASE64
-
-          # Create temporary keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import certificate to keychain
-          # Restrict access to codesign instead of -A (allow any application)
-          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          unset CERTIFICATE_PASSWORD
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-
-          # Allow codesign to access the keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Select a Developer ID from the private CI keychain, never from source.
-          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | \
-            awk -v team="($TEAM_ID)" '/Developer ID Application:/ && index($0, team) { print $2; exit }')
-          if [[ -z "$SIGNING_IDENTITY" ]]; then
-            echo "::error::The certificate must be a Developer ID Application for TEAM_ID, with its private key."
-            exit 1
-          fi
-          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Build app
-        env:
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-        run: |
-          chmod +x scripts/build.sh
-          ./scripts/build.sh
-
-      - name: Verify app signatures
-        run: |
-          codesign --verify --deep --strict build/SpeechDock.app
-          codesign --verify --deep --strict build/SpeechDock.app/Contents/Resources/InputMethods/SpeechDockVoiceInput.app
-
-      - name: Create DMG
-        run: |
-          chmod +x scripts/create-dmg.sh
-          ./scripts/create-dmg.sh
-
-      - name: Notarize DMG
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
-          NOTARY_PROFILE: speechdock-release
-          NOTARY_KEYCHAIN: ${{ runner.temp }}/app-signing.keychain-db
-        run: |
-          bash scripts/setup-notary-profile.sh
-          unset APP_PASSWORD
-          chmod +x scripts/notarize.sh
-          ./scripts/notarize.sh
-
-      - name: Download Sparkle
-        # Keep aligned with the Sparkle framework version pinned in project.yml.
-        # Used here only for the `sign_update` CLI that produces the EdDSA
-        # signature embedded in appcast.xml.
-        run: |
-          curl --fail --location -o /tmp/Sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
-          echo '52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192  /tmp/Sparkle.tar.xz' | shasum -a 256 --check
-          mkdir -p /tmp/Sparkle
-          tar -xf /tmp/Sparkle.tar.xz -C /tmp/Sparkle
-
-      - name: Sign DMG for Sparkle and update appcast
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          umask 077
-          VERSION=$(cat VERSION)
-          DMG_FILE="SpeechDock-$VERSION.dmg"
-          DMG_SIZE=$(stat -f%z "$DMG_FILE")
-          PUB_DATE=$(date -R)
-
-          # Create temporary file with private key
-          # trap ensures the key is removed even if sign_update fails
-          SPARKLE_KEY_FILE=$(mktemp "$RUNNER_TEMP/sparkle_key.XXXXXX")
-          trap 'rm -f "$SPARKLE_KEY_FILE"' EXIT
-          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_KEY_FILE"
-          unset SPARKLE_PRIVATE_KEY
-
-          # Sign the DMG - extract just the signature value (without attribute name)
-          RAW_SIGNATURE=$(/tmp/Sparkle/bin/sign_update "$DMG_FILE" -f "$SPARKLE_KEY_FILE")
-          # Extract the base64 signature from: sparkle:edSignature="..." length="..."
-          SIGNATURE=$(echo "$RAW_SIGNATURE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
-
-          # Reject a secret that does not match the public key embedded in this app.
-          xcrun swift scripts/verify-update-signature.swift "$DMG_FILE" "$SIGNATURE" \
-            build/SpeechDock.app/Contents/Info.plist
-
-          # Clean up key file
-          rm -f "$SPARKLE_KEY_FILE"
-          trap - EXIT
-
-          # Update appcast.xml
-          cat > appcast.xml << EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-              <channel>
-                  <title>SpeechDock Updates</title>
-                  <link>https://github.com/${{ github.repository }}</link>
-                  <description>Most recent changes with links to updates.</description>
-                  <language>en</language>
-                  <item>
-                      <title>Version ${VERSION}</title>
-                      <pubDate>${PUB_DATE}</pubDate>
-                      <sparkle:version>${VERSION}</sparkle:version>
-                      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-                      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-                      <enclosure
-                          url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${DMG_FILE}"
-                          sparkle:edSignature="${SIGNATURE}"
-                          length="${DMG_SIZE}"
-                          type="application/octet-stream"/>
-                  </item>
-              </channel>
-          </rss>
-          EOF
-
-          echo "Signed DMG: $DMG_FILE"
-          echo "Signature: $SIGNATURE"
-          echo "Size: $DMG_SIZE bytes"
-
-      - name: Create Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+      - name: Upload unsigned build for local signing
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          files: SpeechDock-${{ steps.version.outputs.VERSION }}.dmg
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: SpeechDock-${{ steps.version.outputs.VERSION }}-unsigned
+          path: build/SpeechDock-${{ steps.version.outputs.VERSION }}-unsigned.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
 
-      - name: Commit and push appcast.xml
+      - name: Explain local release step
         run: |
-          # Preserve unrelated main updates made while this tag was building.
-          cp appcast.xml "$RUNNER_TEMP/appcast.xml"
-          git fetch origin main
-          git checkout -B release-feed origin/main
-          cp "$RUNNER_TEMP/appcast.xml" appcast.xml
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add appcast.xml
-          git diff --cached --quiet && exit 0
-          git commit -m "Update appcast.xml for $GITHUB_REF_NAME"
-          git push origin HEAD:main
-
-      - name: Cleanup keychain
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
-          rm -f "$RUNNER_TEMP/certificate.p12"
+          {
+            echo 'The artifact is unsigned and is intended for the maintainer.'
+            echo 'On your Mac, check out this tag and run:'
+            echo '```bash'
+            echo "NOTARY_PROFILE=speechdock-release bash scripts/release-local.sh --run $GITHUB_RUN_ID --publish"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -360,7 +360,6 @@
 "Created by" = "개발자";
 "GitHub Repository" = "GitHub 저장소";
 "Documentation" = "문서";
-"Check for Updates..." = "업데이트 확인...";
 
 /* ===== Shortcut HUD ===== */
 "Keyboard Shortcuts" = "키보드 단축키";
@@ -466,15 +465,8 @@
 "Not a Text File" = "텍스트 파일이 아닙니다";
 "This file appears to be a binary file, not a text file." = "이 파일은 바이너리 파일인 것 같습니다. 텍스트 파일이 아닙니다.";
 
-/* ===== Donation ===== */
-"Thank you for using SpeechDock" = "SpeechDock을 이용해 주셔서 감사합니다";
-"This app is free and open source. Development and maintenance costs (Apple Developer Program, etc.) are covered by the developer. If SpeechDock has been helpful to you, please consider supporting its continued development." = "이 앱은 무료 오픈 소스 소프트웨어입니다. 개발 및 유지 비용(Apple Developer Program 등)은 개발자가 부담하고 있습니다. SpeechDock이 도움이 되셨다면 지속적인 개발을 지원해 주세요.";
-"Support" = "지원하기";
-"Already Supported" = "이미 지원함";
-"Later" = "나중에";
-"Support Development" = "개발 지원";
-
 /* ===== Misc ===== */
+"Later" = "나중에";
 "Auto" = "자동";
 "── Premium ──" = "── 프리미엄 ──";
 "── Enhanced ──" = "── 고급 ──";
@@ -625,9 +617,6 @@
 "Log out and back in to apply the input method interface language." = "입력기의 인터페이스 언어를 적용하려면 로그아웃 후 다시 로그인하세요.";
 "SpeechDock" = "SpeechDock";
 "GitHub" = "GitHub";
-"GitHub Sponsors" = "GitHub Sponsors";
-"Buy Me a Coffee" = "Buy Me a Coffee";
-"Ko-fi" = "Ko-fi";
 "© 2026 Yoichiro Hasebe" = "© 2026 Yoichiro Hasebe";
 "A" = "A";
 "1s" = "1s";
@@ -636,3 +625,9 @@
 "60s" = "60s";
 "0.5x" = "0.5x";
 "2.0x" = "2.0x";
+
+/* Modified by ruivza: fork attribution in About. Update/support strings removed. */
+"Maintainer: ruivza" = "유지 관리자: ruivza";
+"Original author: Yoichiro Hasebe" = "원작자: Yoichiro Hasebe";
+"Original Project" = "원본 프로젝트";
+"Apache License 2.0" = "Apache License 2.0";

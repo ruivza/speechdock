@@ -360,7 +360,6 @@
 "Created by" = "Created by";
 "GitHub Repository" = "GitHub Repository";
 "Documentation" = "Documentation";
-"Check for Updates..." = "Check for Updates...";
 
 /* ===== Shortcut HUD ===== */
 "Keyboard Shortcuts" = "Keyboard Shortcuts";
@@ -466,15 +465,8 @@
 "Not a Text File" = "Not a Text File";
 "This file appears to be a binary file, not a text file." = "This file appears to be a binary file, not a text file.";
 
-/* ===== Donation ===== */
-"Thank you for using SpeechDock" = "Thank you for using SpeechDock";
-"This app is free and open source. Development and maintenance costs (Apple Developer Program, etc.) are covered by the developer. If SpeechDock has been helpful to you, please consider supporting its continued development." = "This app is free and open source. Development and maintenance costs (Apple Developer Program, etc.) are covered by the developer. If SpeechDock has been helpful to you, please consider supporting its continued development.";
-"Support" = "Support";
-"Already Supported" = "Already Supported";
-"Later" = "Later";
-"Support Development" = "Support Development";
-
 /* ===== Misc ===== */
+"Later" = "Later";
 "Auto" = "Auto";
 "── Premium ──" = "── Premium ──";
 "── Enhanced ──" = "── Enhanced ──";
@@ -640,9 +632,6 @@
 "Log out and back in to apply the input method interface language." = "Log out and back in to apply the input method interface language.";
 "SpeechDock" = "SpeechDock";
 "GitHub" = "GitHub";
-"GitHub Sponsors" = "GitHub Sponsors";
-"Buy Me a Coffee" = "Buy Me a Coffee";
-"Ko-fi" = "Ko-fi";
 "© 2026 Yoichiro Hasebe" = "© 2026 Yoichiro Hasebe";
 "A" = "A";
 "1s" = "1s";
@@ -651,3 +640,9 @@
 "60s" = "60s";
 "0.5x" = "0.5x";
 "2.0x" = "2.0x";
+
+/* Modified by ruivza: fork attribution in About. Update/support strings removed. */
+"Maintainer: ruivza" = "Maintainer: ruivza";
+"Original author: Yoichiro Hasebe" = "Original author: Yoichiro Hasebe";
+"Original Project" = "Original Project";
+"Apache License 2.0" = "Apache License 2.0";

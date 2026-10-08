@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!-- Modified by ruivza: remove update configuration and add fork copyright. -->
 <dict>
     <key>CFBundleName</key>
     <string>$(SPEECHDOCK_DISPLAY_NAME)</string>
@@ -31,7 +32,7 @@
     <key>NSScreenCaptureUsageDescription</key>
     <string>SpeechDock needs screen recording access for OCR and system/app audio capture.</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Yoichiro Hasebe. All rights reserved.</string>
+    <string>Copyright © 2026 Yoichiro Hasebe. All rights reserved. Fork modifications © 2026 ruivza.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 
@@ -41,14 +42,5 @@
     <key>OSAScriptingDefinition</key>
     <string>SpeechDock.sdef</string>
 
-    <!-- Sparkle Auto-Update Configuration -->
-    <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/ruivza/speechdock/main/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>A8eXgN+wvWLXQ4mfhitO/XuL9hXIxmAEcNCx+eB2yrU=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUEnableInstallerLauncherService</key>
-    <true/>
 </dict>
 </plist>

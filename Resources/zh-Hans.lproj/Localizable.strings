@@ -359,7 +359,6 @@
 "Created by" = "开发者";
 "GitHub Repository" = "GitHub 仓库";
 "Documentation" = "文档";
-"Check for Updates..." = "检查更新...";
 
 /* ===== Shortcut HUD ===== */
 "Keyboard Shortcuts" = "键盘快捷键";
@@ -465,15 +464,8 @@
 "Not a Text File" = "不是文本文件";
 "This file appears to be a binary file, not a text file." = "此文件似乎是二进制文件，而非文本文件。";
 
-/* ===== Donation ===== */
-"Thank you for using SpeechDock" = "感谢使用 SpeechDock";
-"This app is free and open source. Development and maintenance costs (Apple Developer Program, etc.) are covered by the developer. If SpeechDock has been helpful to you, please consider supporting its continued development." = "本应用免费且开源。开发和维护费用（Apple Developer Program 等）由开发者承担。如果 SpeechDock 对您有所帮助，请考虑支持其持续开发。";
-"Support" = "支持";
-"Already Supported" = "已支持";
-"Later" = "稍后";
-"Support Development" = "支持开发";
-
 /* ===== Misc ===== */
+"Later" = "稍后";
 "Auto" = "自动";
 "── Premium ──" = "── 高级 ──";
 "── Enhanced ──" = "── 增强 ──";
@@ -624,9 +616,6 @@
 "Log out and back in to apply the input method interface language." = "注销并重新登录后，输入法界面语言设置生效。";
 "SpeechDock" = "SpeechDock";
 "GitHub" = "GitHub";
-"GitHub Sponsors" = "GitHub Sponsors";
-"Buy Me a Coffee" = "Buy Me a Coffee";
-"Ko-fi" = "Ko-fi";
 "© 2026 Yoichiro Hasebe" = "© 2026 Yoichiro Hasebe";
 "A" = "A";
 "1s" = "1s";
@@ -635,3 +624,9 @@
 "60s" = "60s";
 "0.5x" = "0.5x";
 "2.0x" = "2.0x";
+
+/* Modified by ruivza: fork attribution in About. Update/support strings removed. */
+"Maintainer: ruivza" = "维护者：ruivza";
+"Original author: Yoichiro Hasebe" = "原作者：Yoichiro Hasebe";
+"Original Project" = "原项目";
+"Apache License 2.0" = "Apache 2.0 许可证";

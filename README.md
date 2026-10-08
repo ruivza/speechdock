@@ -12,7 +12,7 @@ This repository is an independently maintained fork of [yohasebe/speechdock](htt
 - [Build and release](https://github.com/ruivza/speechdock/wiki/Build-and-Release) · [AppleScript](https://github.com/ruivza/speechdock/wiki/AppleScript)
 - [Chinese documentation](docs/index.md) · [Japanese overview](README_ja.md)
 
-Update checks use this repository's appcast. The upstream project's Homebrew commands do not install this fork.
+Updates are installed manually from this repository's Releases. The app does not check for or download updates automatically. The upstream project's Homebrew commands do not install this fork.
 
 ## Features and current behavior
 
@@ -39,8 +39,8 @@ xcodegen generate
 open SpeechDock.xcodeproj
 ```
 
-Current shared configuration does not contain a developer's Team ID, personal certificate name, or private key. Release builds select a signing identity from local configuration or GitHub Secrets. Distributed packages contain the necessary public signing information. The update verification public key is safe to include in source. Older upstream commits retain the original author's public signing settings.
+Current shared configuration does not contain a developer's Team ID, personal certificate name, or private key. GitHub Actions builds an unsigned app; the maintainer signs, notarizes, and uploads the release from a local Mac. Developer ID private keys and notarization credentials stay in the local Keychain. See the [release guide](docs/wiki/build-release.md). Distributed packages contain the necessary public signing information. Older upstream commits retain the original author's public signing settings.
 
 ## License and source
 
-[Apache License 2.0](LICENSE). The original project is [yohasebe/speechdock](https://github.com/yohasebe/speechdock), created by Yoichiro Hasebe. This fork is maintained by [ruivza](https://github.com/ruivza).
+[Apache License 2.0](LICENSE). The original project is [yohasebe/speechdock](https://github.com/yohasebe/speechdock), created by Yoichiro Hasebe. This fork is maintained by [ruivza](https://github.com/ruivza). The About page identifies both roles, and distributed apps include `LICENSE` and `NOTICE`.

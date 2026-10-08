@@ -20,12 +20,12 @@ CHANGELOG.md
 CONTRIBUTING.md
 ExportOptions.plist
 LICENSE
+NOTICE
 README{,_ja}.md
 Rakefile
 Signing.xcconfig
 Signing.local.xcconfig.example
 VERSION
-appcast.xml
 project.yml
 
 # --- Repository tooling -----------------------------------------------------

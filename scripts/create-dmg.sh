@@ -1,115 +1,46 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# SpeechDock DMG Creation Script
-# This script creates a DMG installer for SpeechDock
-
+# Package with macOS tools only. Signing and notarization follow in
+# release-local.sh; this script does not access the signing Keychain.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VERSION=$(cat "$PROJECT_DIR/VERSION")
 BUILD_DIR="$PROJECT_DIR/build"
 APP_NAME="SpeechDock"
+APP="$BUILD_DIR/$APP_NAME.app"
 DMG_NAME="$APP_NAME-$VERSION.dmg"
 
-echo "Creating DMG for $APP_NAME v$VERSION..."
-
-# Check if create-dmg is installed
-if ! command -v create-dmg &> /dev/null; then
-    echo "Error: create-dmg is not installed."
-    echo "Install with: brew install create-dmg"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    echo "Error: invalid VERSION." >&2
+    exit 1
+}
+for tool in ditto hdiutil; do
+    command -v "$tool" >/dev/null || { echo "Error: missing macOS tool $tool." >&2; exit 1; }
+done
+if [ ! -d "$APP" ]; then
+    echo "Error: $APP not found. Build or download the app first." >&2
     exit 1
 fi
 
-# Check if app exists
-if [ ! -d "$BUILD_DIR/$APP_NAME.app" ]; then
-    echo "Error: $BUILD_DIR/$APP_NAME.app not found."
-    echo "Run ./scripts/build.sh first."
+# Stage only the app and an Applications shortcut. ditto preserves executable
+# modes and framework symlinks, as well as the app's existing signatures.
+WORK_DIR=$(mktemp -d "$BUILD_DIR/dmg.XXXXXX")
+trap 'rm -rf "$WORK_DIR"' EXIT
+SOURCE_DIR="$WORK_DIR/volume"
+mkdir -p "$SOURCE_DIR"
+ditto "$APP" "$SOURCE_DIR/$APP_NAME.app"
+ln -s /Applications "$SOURCE_DIR/Applications"
+
+# A failed creation or verification leaves any previous DMG untouched.
+# UDZO and HFS+ are supported by all macOS versions supported by this app.
+echo "Creating DMG for $APP_NAME v$VERSION with macOS tools..."
+hdiutil create -volname "$APP_NAME" -srcfolder "$SOURCE_DIR" \
+    -format UDZO -fs HFS+ "$WORK_DIR/$DMG_NAME"
+if [ ! -s "$WORK_DIR/$DMG_NAME" ]; then
+    echo "Error: DMG creation produced no image." >&2
     exit 1
 fi
-
-# Remove existing DMG if it exists
-rm -f "$PROJECT_DIR/$DMG_NAME"
-
-# Create DMG
-echo "Creating DMG..."
-
-# Build create-dmg arguments
-DMG_ARGS=(
-    --volname "$APP_NAME"
-    --window-pos 200 120
-    --window-size 600 400
-    --icon-size 100
-    --icon "$APP_NAME.app" 150 190
-    --hide-extension "$APP_NAME.app"
-    --app-drop-link 450 185
-    --no-internet-enable
-)
-
-# Add volume icon if it exists
-ICON_PATH="$BUILD_DIR/$APP_NAME.app/Contents/Resources/AppIcon.icns"
-if [ -f "$ICON_PATH" ]; then
-    DMG_ARGS+=(--volicon "$ICON_PATH")
-    echo "Using app icon for volume icon"
-else
-    echo "Note: AppIcon.icns not found, creating DMG without volume icon"
-fi
-
-if ! create-dmg \
-    "${DMG_ARGS[@]}" \
-    "$PROJECT_DIR/$DMG_NAME" \
-    "$BUILD_DIR/$APP_NAME.app"; then
-    # create-dmg returns non-zero on some warnings; log it and let the
-    # existence check below decide whether creation actually failed
-    echo "Warning: create-dmg exited with a non-zero status"
-fi
-
-# Verify DMG was created
-if [ -f "$PROJECT_DIR/$DMG_NAME" ]; then
-    echo "DMG created successfully: $PROJECT_DIR/$DMG_NAME"
-
-    # Set custom icon on the DMG file itself
-    if [ -f "$ICON_PATH" ]; then
-        echo "Setting custom icon on DMG file..."
-
-        ICON_SET=false
-
-        # Method 1: Use fileicon if available (most reliable)
-        if command -v fileicon &> /dev/null; then
-            fileicon set "$PROJECT_DIR/$DMG_NAME" "$ICON_PATH" 2>/dev/null && ICON_SET=true
-        fi
-
-        # Method 2: Fallback to DeRez/Rez method
-        if [ "$ICON_SET" = false ] && command -v DeRez &> /dev/null; then
-            ICON_TEMP_DIR=$(mktemp -d)
-            ICON_RSRC="$ICON_TEMP_DIR/icon.rsrc"
-
-            cp "$ICON_PATH" "$ICON_TEMP_DIR/icon.icns"
-            sips -i "$ICON_TEMP_DIR/icon.icns" &> /dev/null || true
-            DeRez -only icns "$ICON_TEMP_DIR/icon.icns" > "$ICON_RSRC" 2>/dev/null || true
-
-            if [ -s "$ICON_RSRC" ]; then
-                Rez -append "$ICON_RSRC" -o "$PROJECT_DIR/$DMG_NAME" 2>/dev/null || true
-                SetFile -a C "$PROJECT_DIR/$DMG_NAME" 2>/dev/null || true
-                ICON_SET=true
-            fi
-
-            rm -rf "$ICON_TEMP_DIR"
-        fi
-
-        if [ "$ICON_SET" = true ]; then
-            echo "Custom icon set on DMG file"
-        else
-            echo "Note: Could not set custom icon on DMG file"
-            echo "      Install fileicon with: brew install fileicon"
-        fi
-    fi
-
-    # Show file size
-    SIZE=$(du -h "$PROJECT_DIR/$DMG_NAME" | cut -f1)
-    echo "Size: $SIZE"
-else
-    echo "Error: DMG creation failed"
-    exit 1
-fi
-
-echo "DMG creation complete!"
+hdiutil verify "$WORK_DIR/$DMG_NAME"
+mv -f "$WORK_DIR/$DMG_NAME" "$PROJECT_DIR/$DMG_NAME"
+echo "DMG created: $PROJECT_DIR/$DMG_NAME"

@@ -3,4 +3,6 @@
 "NSMicrophoneUsageDescription" = "SpeechDock benötigt Mikrofonzugriff, um Ihre Stimme für die Transkription aufzunehmen.";
 "NSSpeechRecognitionUsageDescription" = "SpeechDock verwendet Spracherkennung für die Echtzeit-Transkription.";
 "NSScreenCaptureUsageDescription" = "SpeechDock benötigt die Bildschirmaufnahme-Berechtigung für OCR und die Aufnahme von System- oder App-Audio.";
-"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved.";
+"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved. Fork modifications \U00A9 2026 ruivza.";
+
+/* Modified by ruivza: retain upstream copyright and add fork modifications. */

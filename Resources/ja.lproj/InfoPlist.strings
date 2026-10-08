@@ -3,4 +3,6 @@
 "NSMicrophoneUsageDescription" = "SpeechDockは音声の文字起こしのためにマイクへのアクセスが必要です。";
 "NSSpeechRecognitionUsageDescription" = "SpeechDockはリアルタイム文字起こしのために音声認識を使用します。";
 "NSScreenCaptureUsageDescription" = "SpeechDock は画面上の文字認識とシステム・アプリ音声の取得に画面収録の権限が必要です。";
-"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved.";
+"NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved. Fork modifications \U00A9 2026 ruivza.";
+
+/* Modified by ruivza: retain upstream copyright and add fork modifications. */

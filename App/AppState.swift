@@ -1,3 +1,4 @@
+// Modified by ruivza: remove donation reminders and their stored state.
 import SwiftUI
 import Combine
 import AVFoundation
@@ -51,32 +52,6 @@ final class AppState {
     /// Flag indicating whether the app has completed initialization
     /// AppleScript commands should wait for this before executing
     var isInitialized = false
-
-    // MARK: - Donation Reminder
-    var firstLaunchDate: Date? {
-        didSet {
-            guard !isLoadingPreferences else { return }
-            UserDefaults.standard.set(firstLaunchDate, forKey: "firstLaunchDate")
-        }
-    }
-    var donationReminderCount: Int = 0 {
-        didSet {
-            guard !isLoadingPreferences else { return }
-            UserDefaults.standard.set(donationReminderCount, forKey: "donationReminderCount")
-        }
-    }
-    var donationDismissedPermanently: Bool = false {
-        didSet {
-            guard !isLoadingPreferences else { return }
-            UserDefaults.standard.set(donationDismissedPermanently, forKey: "donationDismissedPermanently")
-        }
-    }
-    var nextDonationReminderDate: Date? {
-        didSet {
-            guard !isLoadingPreferences else { return }
-            UserDefaults.standard.set(nextDonationReminderDate, forKey: "nextDonationReminderDate")
-        }
-    }
 
     // MARK: - STT State
     var isRecording = false
@@ -589,10 +564,6 @@ final class AppState {
         persistsPreferences = startServices
         guard startServices else { return }
         loadPreferences()
-        // Record first launch date if not already set
-        if firstLaunchDate == nil {
-            firstLaunchDate = Date()
-        }
         refreshVoiceCachesInBackground()
         prefetchAvailableAppsInBackground()
         updatePermissionStatus()
@@ -1971,20 +1942,6 @@ final class AppState {
             translationTargetLanguage = language
         }
 
-        // Donation reminder settings
-        if let savedDate = UserDefaults.standard.object(forKey: "firstLaunchDate") as? Date {
-            firstLaunchDate = savedDate
-        }
-        if UserDefaults.standard.object(forKey: "donationReminderCount") != nil {
-            donationReminderCount = UserDefaults.standard.integer(forKey: "donationReminderCount")
-        }
-        if UserDefaults.standard.object(forKey: "donationDismissedPermanently") != nil {
-            donationDismissedPermanently = UserDefaults.standard.bool(forKey: "donationDismissedPermanently")
-        }
-        if let savedNextDate = UserDefaults.standard.object(forKey: "nextDonationReminderDate") as? Date {
-            nextDonationReminderDate = savedNextDate
-        }
-
         // Validate providers: fall back to macOS if selected provider requires API key but it's not available
         validateSelectedProviders()
         let stt = RealtimeSTTFactory.makeService(for: selectedRealtimeProvider)
@@ -2124,63 +2081,6 @@ final class AppState {
         UserDefaults.standard.set(translationTargetLanguage.rawValue, forKey: "translationTargetLanguage")
 
         // Note: selectedAudioAppBundleID is not saved - it's session-only
-    }
-
-    // MARK: - Donation Reminder
-
-    /// Check if the donation reminder should be shown
-    func shouldShowDonationReminder() -> Bool {
-        // Already dismissed permanently
-        guard !donationDismissedPermanently else { return false }
-
-        guard let firstLaunch = firstLaunchDate else { return false }
-
-        let now = Date()
-
-        if let nextDate = nextDonationReminderDate {
-            // Subsequent reminders: after nextDonationReminderDate
-            return now >= nextDate
-        } else {
-            // First reminder: 30 days after first launch
-            let daysSinceFirstLaunch = Calendar.current.dateComponents([.day], from: firstLaunch, to: now).day ?? 0
-            return daysSinceFirstLaunch >= 30
-        }
-    }
-
-    /// Show the donation reminder dialog
-    func showDonationReminder() {
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString("Thank you for using SpeechDock", comment: "Donation reminder title")
-        alert.informativeText = NSLocalizedString("This app is free and open source. Development and maintenance costs (Apple Developer Program, etc.) are covered by the developer. If SpeechDock has been helpful to you, please consider supporting its continued development.", comment: "Donation reminder message")
-        alert.alertStyle = .informational
-        alert.icon = NSApp.applicationIconImage
-
-        // Buttons are added in order: first = rightmost (default)
-        alert.addButton(withTitle: NSLocalizedString("Support", comment: "Donation reminder button"))
-        alert.addButton(withTitle: NSLocalizedString("Already Supported", comment: "Donation reminder button"))
-        alert.addButton(withTitle: NSLocalizedString("Later", comment: "Donation reminder button"))
-
-        // Presented as a sheet on the active window.
-
-        WindowPresentation.alert(alert) { [self] response in
-        switch response {
-        case .alertFirstButtonReturn:
-            // Support → Open GitHub Sponsors
-            if let url = URL(string: "https://github.com/sponsors/yohasebe") {
-                NSWorkspace.shared.open(url)
-            }
-            donationDismissedPermanently = true
-        case .alertSecondButtonReturn:
-            // Already Supported → Never show again
-            donationDismissedPermanently = true
-        case .alertThirdButtonReturn:
-            // Later → Show again in 30 days
-            donationReminderCount += 1
-            nextDonationReminderDate = Calendar.current.date(byAdding: .day, value: 30, to: Date())
-        default:
-            break
-        }
-        }
     }
 }
 

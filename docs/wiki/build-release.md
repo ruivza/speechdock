@@ -1,6 +1,6 @@
 # Build and Release
 
-You can sign releases with your own certificate while keeping shared source configuration independent of an account. Signed packages contain public Team ID, certificate, and signature information. Current source configuration contains build rules, placeholders, and an update verification public key. Older upstream commits retain the original author's public signing settings.
+You can sign releases with your own certificate while keeping shared source configuration independent of an account. Signed packages contain public Team ID, certificate, and signature information. Current source configuration contains build rules and placeholders. Older upstream commits retain the original author's public signing settings.
 
 ## Local Debug builds
 
@@ -28,41 +28,49 @@ NOTARY_PROFILE=speechdock-release bash scripts/notarize.sh
 
 The build script creates a universal arm64 and x86_64 Release and writes export settings into the ignored `build/` directory. Use `SIGNING_IDENTITY` to select a local certificate name or SHA-1 fingerprint without editing tracked source. Notarization credentials are read from a Keychain profile.
 
-## GitHub releases
+## Build on GitHub, sign and publish on your Mac
 
-Under this repository's Settings > Secrets and variables > Actions, configure these repository secrets:
+GitHub Actions builds a universal arm64 and x86_64 Release and stores an unsigned artifact. It does not create a Release. Developer ID private keys and notarization credentials remain in the maintainer's local Keychain. No Apple certificate, certificate password, or notarization secrets are needed on GitHub.
 
-| Secret | Value |
-| --- | --- |
-| `CERTIFICATE_BASE64` | Base64 of a .p12 containing the Developer ID Application certificate and private key |
-| `CERTIFICATE_PASSWORD` | The .p12 export password |
-| `KEYCHAIN_PASSWORD` | Password for the temporary CI Keychain |
-| `TEAM_ID` | The Team ID matching the certificate |
-| `APPLE_ID` | Apple Account used for notarization |
-| `APP_PASSWORD` | That account's app-specific password |
-| `SPARKLE_PRIVATE_KEY` | Update signing private key matching the app's `SUPublicEDKey` |
+### One-time local setup
 
-Never commit certificates, private keys, or passwords to Git or put them in issues, Wiki pages, chat, or build logs. Actions imports signing material into a temporary Keychain only for the release job. Xcode build commands do not inherit the secret environment variables, and the job cleans up signing material afterward.
-
-Keep `VERSION` and the version settings for both application targets in `project.yml` aligned. After checking and committing the version changes, push the matching `vX.Y.Z` tag to trigger a release. For example:
+Install your Developer ID Application certificate with its private key and Xcode command-line tools. You do not need to export a .p12 or upload a certificate to GitHub.
 
 ```bash
-rake version:patch
-rake version:verify
-# Commit the verified version changes and push main first.
-git tag vX.Y.Z
-git push origin vX.Y.Z
+brew install gh
+gh auth login
+xcrun notarytool store-credentials speechdock-release
 ```
 
-Replace X.Y.Z with the actual version. The workflow stops if secrets are missing, the certificate type or Team ID is wrong, the tag does not match the version, or signing or notarization fails. It pushes the signed appcast to main only after creating the Release. It does not update the upstream Homebrew tap.
+The last command interactively saves your Apple Account, Team ID, and app-specific password in the Keychain. The release script reads the stored profile. Keep passwords out of commands, source, and GitHub.
 
-## Sparkle update signing
+The script automatically selects a certificate if exactly one valid Developer ID Application is available. For multiple certificates, inspect the public SHA-1 fingerprints with `security find-identity -v -p codesigning` and set `SIGNING_IDENTITY` to an exact certificate name or fingerprint.
 
-Developer ID and Sparkle signatures serve different purposes. The repository includes a public `SUPublicEDKey`. Only its matching private key can sign updates accepted by the app. CI verifies the DMG update signature against the public key embedded in the app before publishing.
+DMGs are created with macOS `hdiutil` and `ditto` and contain the app and an Applications shortcut. GitHub's official `gh` is the only additional local release tool to install; packaging requires no third-party tools.
 
-Manage update keys with official Sparkle tools from a verified version and SHA-256 download. Keep the private key in a local Keychain. To configure CI, the maintainer exports it outside the repository, sets `SPARKLE_PRIVATE_KEY`, and removes the exported file. A newly generated private key cannot sign updates for the existing public key; changing that key requires an update trust migration for existing users.
+### Each release
 
-Reading a Keychain private key may require local authorization. Editing source and verifying public samples do not require private key access. The maintainer should perform key export on their own Mac.
+This fork maintains its own version numbers independently of upstream. Use this repository's release notes and `vX.Y.Z` tags for new versions; preserve existing changelog history and never replace old tags.
+
+1. Keep `VERSION` and both application targets in `project.yml` aligned. Commit and push the verified changes.
+2. Push the matching `vX.Y.Z` tag to trigger **Build Release Artifact**, or run `rake release:github`. Existing tags are never replaced.
+3. Wait for a successful run and copy RUN_ID from its `/actions/runs/` URL. Artifacts expire after 30 days and are intended for maintainer signing, not user installation.
+4. Check out the tag locally and run the release script.
+
+```bash
+# Replace X.Y.Z and RUN_ID with the actual version and run number.
+git fetch origin tag vX.Y.Z
+git switch --detach vX.Y.Z
+NOTARY_PROFILE=speechdock-release bash scripts/release-local.sh --run RUN_ID --publish
+```
+
+The script checks the remote tag, build commit, and local signing script revision, downloads the artifact, and restores executable modes and framework symlinks. It signs nested code, the Voice Input helper, and the main app separately with their own entitlements, then creates and signs a DMG, notarizes and staples it, and checks signatures and Gatekeeper. Only after all checks succeed does it upload the DMG and its SHA-256 checksum to a new Release. It does not overwrite releases or create missing tags.
+
+Omit `--publish` to generate only a local package. The equivalent Rake command is `NOTARY_PROFILE=speechdock-release PUBLISH=1 rake 'release:local[RUN_ID]'`. Other forks can supply `--repo OWNER/REPO`.
+
+The unsigned ZIP is in `build/SpeechDock-X.Y.Z-unsigned.zip`; the signed DMG is in the project root. Git ignores these outputs. Fully local builds still work using `scripts/build.sh`, as above; `bash scripts/build.sh --unsigned` exercises the certificate-free build path locally.
+
+Users download and install updates manually from this fork's Releases. The app does not check for or download updates automatically, and releases do not update the upstream Homebrew tap.
 
 ## Wiki synchronization
 
@@ -75,6 +83,6 @@ python3 scripts/sync-wiki.py --repository ruivza/speechdock
 
 Synchronization replaces the Wiki's current pages with this English guide and retains upstream attribution. It preserves Git history and uses a normal push.
 
-References: [GitHub macOS runner certificate setup](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications) and [Sparkle publishing guide](https://sparkle-project.org/documentation/).
+References: [Apple distribution signing](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac), [GitHub workflow artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts), [GitHub CLI releases](https://cli.github.com/manual/gh_release_create).
 
 [Home](index.md) · Source: [yohasebe/speechdock](https://github.com/yohasebe/speechdock)

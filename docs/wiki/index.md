@@ -14,9 +14,9 @@ This guide covers the current [ruivza/speechdock](https://github.com/ruivza/spee
 
 ## Installation
 
-Download official packages from [this repository's Releases](https://github.com/ruivza/speechdock/releases). Release packages require the maintainer's Developer ID Application signature, notarization, and update signature. If no package is available, follow the [build guide](build-release.md) to build locally.
+Download official packages from [this repository's Releases](https://github.com/ruivza/speechdock/releases). Release packages require the maintainer's Developer ID Application signature and notarization. If no package is available, follow the [build guide](build-release.md) to build locally.
 
-The upstream Homebrew tap and older upstream packages do not install this fork. Update checks use this repository's appcast. Until its first signed release, the feed has no installable update.
+The upstream Homebrew tap and older upstream packages do not install this fork. Download and install updates manually from this repository's Releases. The app does not check for or download updates automatically.
 
 ## Requirements and languages
 

@@ -1,4 +1,5 @@
 # SpeechDock Development Rakefile
+# Modified by ruivza: releases no longer publish an automatic-update feed.
 
 require 'fileutils'
 
@@ -373,100 +374,45 @@ end
 # ============================================================
 
 namespace :release do
-  desc "Create DMG for distribution"
-  task :dmg => "build:release" do
-    puts "Creating DMG..."
-    sh "chmod +x scripts/create-dmg.sh && ./scripts/create-dmg.sh"
+  desc "Build an unsigned universal app for local signing"
+  task :unsigned do
+    sh "bash", "scripts/build.sh", "--unsigned"
   end
 
-  desc "Notarize DMG (requires NOTARY_PROFILE)"
+  desc "Build a signed app and create a DMG on this Mac"
+  task :dmg do
+    sh "bash", "scripts/build.sh"
+    sh "bash", "scripts/create-dmg.sh"
+  end
+
+  desc "Build and notarize locally (requires NOTARY_PROFILE)"
   task :notarize => :dmg do
-    # Check for required environment variables
-    missing_vars = []
-    missing_vars << "NOTARY_PROFILE" if ENV["NOTARY_PROFILE"].to_s.empty?
-
-    unless missing_vars.empty?
-      puts ""
-      puts "=" * 60
-      puts "ERROR: Missing required environment variables for notarization"
-      puts "=" * 60
-      puts ""
-      puts "The following environment variables are not set:"
-      missing_vars.each { |v| puts "  - #{v}" }
-      puts ""
-      puts "Options:"
-      puts "  1. Set environment variables and run again:"
-      puts "     xcrun notarytool store-credentials speechdock"
-      puts "     export NOTARY_PROFILE='speechdock'"
-      puts "     rake release:local"
-      puts ""
-      puts "  2. Use GitHub Actions (recommended):"
-      puts "     rake prepare:release"
-      puts "     # Then follow the instructions"
-      puts ""
-      puts "=" * 60
-      exit 1
-    end
-
-    puts "Notarizing DMG..."
-    sh "chmod +x scripts/notarize.sh && ./scripts/notarize.sh"
+    abort "Set NOTARY_PROFILE to a local notarytool Keychain profile" if ENV["NOTARY_PROFILE"].to_s.empty?
+    sh "bash", "scripts/notarize.sh"
   end
 
-  desc "Local release (requires NOTARY_PROFILE). Prefer release:github"
-  task :local => :notarize do
-    # Install to /Applications after successful notarization
-    app_path = find_built_app("Release")
-    if app_path
-      puts ""
-      puts "Installing to /Applications..."
-      install_app(app_path)
-    end
-
-    puts ""
-    puts "=" * 60
-    puts "Release complete: #{APP_NAME}-#{app_version}.dmg"
-    puts "Installed to: /Applications/#{APP_NAME}.app"
-    puts "=" * 60
+  desc "Sign and notarize a GitHub build: release:local[RUN_ID]; PUBLISH=1 uploads it"
+  task :local, [:run_id] do |_, args|
+    abort "Usage: NOTARY_PROFILE=speechdock-release rake release:local[RUN_ID]" if args[:run_id].to_s.empty?
+    command = ["bash", "scripts/release-local.sh", "--run", args[:run_id]]
+    command << "--publish" if ENV["PUBLISH"] == "1"
+    sh(*command)
   end
 
-  desc "Create release via GitHub Actions (recommended)"
-  task :github do
+  desc "Push the current version tag to build an unsigned GitHub artifact"
+  task :github => "version:verify" do
     version = app_version
-    puts ""
-    puts "Creating release v#{version} via GitHub Actions..."
-    puts ""
-
-    # Check if tag already exists
-    tag_exists = system("git rev-parse v#{version} >/dev/null 2>&1")
-    if tag_exists
-      puts "Tag v#{version} already exists."
-      print "Delete existing tag and recreate? [y/N]: "
-      answer = STDIN.gets.chomp.downcase
-      if answer == 'y'
-        sh "git tag -d v#{version}"
-        sh "git push origin :refs/tags/v#{version} 2>/dev/null || true"
-        # Delete existing release if any
-        system "gh release delete v#{version} --yes 2>/dev/null"
-      else
-        puts "Aborted."
-        exit 0
-      end
+    abort "Invalid VERSION" unless version.match?(/\A[0-9]+\.[0-9]+\.[0-9]+\z/)
+    abort "Commit tracked changes before tagging" unless system("git", "diff", "--quiet", "HEAD")
+    if system("git", "rev-parse", "--verify", "--quiet", "refs/tags/v#{version}", out: File::NULL)
+      abort "Tag v#{version} already exists. Reuse its build, or increment VERSION; tags are not replaced."
     end
-
-    # Create and push tag
-    sh "git tag v#{version}"
-    sh "git push origin v#{version}"
-
-    puts ""
-    puts "Tag v#{version} pushed. GitHub Actions will:"
-    puts "  1. Build the Release version"
-    puts "  2. Create notarized DMG"
-    puts "  3. Update appcast.xml"
-    puts "  4. Create GitHub Release"
-    puts ""
-    puts "Monitor progress at:"
-    puts "  https://github.com/ruivza/speechdock/actions"
-    puts ""
+    sh "git", "tag", "v#{version}"
+    sh "git", "push", "origin", "v#{version}"
+    puts "GitHub builds an unsigned artifact; it does not create a Release."
+    puts "After it succeeds, check out the tag and run on your Mac:"
+    puts "  NOTARY_PROFILE=speechdock-release bash scripts/release-local.sh --run RUN_ID --publish"
+    puts "Builds: https://github.com/ruivza/speechdock/actions"
   end
 end
 
@@ -524,7 +470,7 @@ namespace :prepare do
       puts "✓ Version #{new_version} committed and pushed"
       puts ""
       puts "Next step:"
-      puts "  rake release:github   # Create release via GitHub Actions (recommended)"
+      puts "  rake release:github   # Build an unsigned GitHub artifact"
       puts "=" * 60
     else
       puts ""
@@ -535,11 +481,11 @@ namespace :prepare do
     end
   end
 
-  desc "Quick prepare: bump patch, commit, and trigger GitHub release"
+  desc "Quick prepare: bump patch, commit, and trigger an unsigned GitHub build"
   task :quick do
     Rake::Task["prepare:release"].invoke("patch")
 
-    print "Trigger GitHub Actions release now? [y/N]: "
+    print "Trigger the unsigned GitHub build now? [y/N]: "
     answer = STDIN.gets.chomp.downcase
     if answer == 'y'
       Rake::Task["release:github"].invoke
@@ -739,8 +685,8 @@ task :help do
   puts "  rake prepare:quick           # Quick patch release prep"
   puts ""
   puts "Release:"
-  puts "  rake release:github   # Create release via GitHub Actions (recommended)"
-  puts "  rake release:local    # Local release (requires NOTARY_PROFILE)"
+  puts "  rake release:github   # Build an unsigned GitHub artifact"
+  puts "  rake release:local[RUN_ID] # Sign and notarize a GitHub build; PUBLISH=1 uploads it"
   puts "  rake release:dmg      # Create DMG only (no notarization)"
   puts ""
   puts "Development:"

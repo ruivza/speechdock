@@ -1,0 +1,13 @@
+SpeechDock
+
+Original project: https://github.com/yohasebe/speechdock
+Copyright 2026 Yoichiro Hasebe
+
+This independent fork is maintained by ruivza:
+https://github.com/ruivza/speechdock
+Copyright 2026 ruivza for fork modifications.
+
+This fork changes application behavior, permissions, interface, documentation,
+and release configuration. Automatic updates and donation prompts are removed.
+
+Licensed under the Apache License, Version 2.0. See the accompanying LICENSE.

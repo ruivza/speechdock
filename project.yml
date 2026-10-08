@@ -1,3 +1,4 @@
+# Modified by ruivza: remove the updater dependency and bundle license/attribution.
 name: SpeechDock
 options:
   bundleIdPrefix: com.speechdock
@@ -25,11 +26,6 @@ packages:
   HotKey:
     url: https://github.com/soffes/HotKey
     from: 0.2.1
-  Sparkle:
-    url: https://github.com/sparkle-project/Sparkle
-    # Includes the symlink/installer security fixes through 2.9.6.
-    # Keep the release signing tools at the same version.
-    exactVersion: 2.9.6
 
 targets:
   SpeechDock:
@@ -46,6 +42,10 @@ targets:
       - path: Resources/SpeechDock.sdef
         buildPhase: resources
       - path: Resources/container-migration.plist
+        buildPhase: resources
+      - path: LICENSE
+        buildPhase: resources
+      - path: NOTICE
         buildPhase: resources
       - path: Resources/en.lproj
         buildPhase: resources
@@ -64,8 +64,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speechdock.app
         PRODUCT_NAME: SpeechDock
-        MARKETING_VERSION: "0.1.39"
-        CURRENT_PROJECT_VERSION: "0.1.39"
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "0.2.0"
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/SpeechDock.entitlements
         SWIFT_VERSION: "5.9"
@@ -83,7 +83,6 @@ targets:
           SPEECHDOCK_DISPLAY_NAME: SpeechDock
     dependencies:
       - package: HotKey
-      - package: Sparkle
       - target: SpeechDockVoiceInput
         embed: true
         link: false
@@ -129,8 +128,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.speechdock.inputmethod.voice
         PRODUCT_NAME: SpeechDockVoiceInput
         VOICE_INPUT_DISPLAY_NAME: SpeechDock Voice Input
-        MARKETING_VERSION: "0.1.39"
-        CURRENT_PROJECT_VERSION: "0.1.39"
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "0.2.0"
         INFOPLIST_FILE: InputMethod/Info.plist
         CODE_SIGN_ENTITLEMENTS: InputMethod/VoiceInput.entitlements
         SWIFT_VERSION: "5.9"

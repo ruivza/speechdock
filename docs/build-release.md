@@ -72,7 +72,7 @@ Developer ID 与 Sparkle 是两套用途不同的签名。仓库保留公开的 
 
 ## Wiki 同步
 
-当前 Wiki 由这些重写的文档生成。先在 GitHub Wiki 创建首页，再运行：
+当前 Wiki 使用英文，由 `docs/wiki/` 中的文档生成。先在 GitHub Wiki 创建首页，再运行：
 
 ```bash
 python3 scripts/sync-wiki.py --preview /tmp/speechdock-wiki-preview

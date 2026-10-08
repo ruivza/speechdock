@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the fork's current documentation; preserve Wiki Git history."""
+"""Publish the fork's English Wiki documentation; preserve Wiki Git history."""
 
 import argparse
 import re
@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+WIKI_DOCS = ROOT / "docs" / "wiki"
 PAGES = {
     "index.md": "Home",
     "basics.md": "Getting-Started",
@@ -21,21 +22,20 @@ PAGES = {
 def render_pages():
     pages = {}
     for source, title in PAGES.items():
-        text = (ROOT / "docs" / source).read_text(encoding="utf-8")
+        text = (WIKI_DOCS / source).read_text(encoding="utf-8")
         if text.startswith("---\n"):
             text = text.split("---\n", 2)[2].lstrip()
         for filename, wiki_title in PAGES.items():
             text = text.replace("](" + filename + ")", "](" + wiki_title + ")")
-        text = text.replace("](index_ja.md)", "](https://github.com/ruivza/speechdock/blob/main/docs/index_ja.md)")
         pages[title + ".md"] = text
     pages["_Sidebar.md"] = "\n".join(
         "- [" + label + "](" + title + ")" for label, title in [
-            ("首页", "Home"), ("开始使用", "Getting-Started"),
-            ("系统权限", "Permissions"), ("隐私与缓存", "Privacy-and-Cache"),
-            ("AppleScript", "AppleScript"), ("编译与发布", "Build-and-Release"),
+            ("Home", "Home"), ("Getting Started", "Getting-Started"),
+            ("Permissions", "Permissions"), ("Privacy and Cache", "Privacy-and-Cache"),
+            ("AppleScript", "AppleScript"), ("Build and Release", "Build-and-Release"),
         ]
     ) + "\n"
-    pages["_Footer.md"] = "当前指南按此分支重写。原项目：[yohasebe/speechdock](https://github.com/yohasebe/speechdock)。保留 Apache License 2.0 与原作者版权归属。\n"
+    pages["_Footer.md"] = "This guide describes the current SpeechDock fork. Upstream: [yohasebe/speechdock](https://github.com/yohasebe/speechdock). The Apache License 2.0 and original copyright notices are retained.\n"
     return pages
 
 
@@ -86,11 +86,11 @@ def main():
         git(checkout, "add", "--", ".")
         changed = subprocess.run(["git", "-C", str(checkout), "diff", "--cached", "--quiet"])
         if changed.returncode == 0:
-            print("Wiki already matches the current fork documentation.")
+            print("Wiki already matches the English documentation.")
             return
         if changed.returncode != 1:
             raise SystemExit("Cannot inspect staged Wiki changes")
-        git(checkout, "commit", "-m", "Rewrite Wiki for sandboxed SpeechDock fork")
+        git(checkout, "commit", "-m", "Update English Wiki for SpeechDock fork")
         git(checkout, "push", "origin", "HEAD")
         print("Wiki published: https://github.com/" + args.repository + "/wiki")
 

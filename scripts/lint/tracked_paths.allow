@@ -66,4 +66,5 @@ docs/_includes/head_custom.html
 docs/_sass/custom/custom.scss
 docs/{index,basics,advanced,applescript}{,_ja}.md
 docs/{permissions,build-release}.md
+docs/wiki/{index,basics,permissions,advanced,applescript,build-release}.md
 docs/images/*.png

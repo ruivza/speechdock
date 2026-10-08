@@ -43,3 +43,4 @@ kramdown:
 exclude:
   - _config.yml.bak
   - Gemfile.lock
+  - wiki/

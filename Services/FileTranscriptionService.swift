@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Speech
 @preconcurrency import AVFoundation
 
@@ -50,25 +51,26 @@ final class FileTranscriptionService {
         provider: RealtimeSTTProvider,
         language: String?
     ) async throws -> TranscriptionResult {
+        // Keep the picker/drop grant alive for the entire asynchronous import.
+        let scoped = fileURL.startAccessingSecurityScopedResource()
+        defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
         // Validate provider supports file transcription
         guard provider.supportsFileTranscription else {
             throw FileTranscriptionError.providerNotSupported(provider)
         }
 
-        // Validate file with provider-specific limits
-        try validateFile(fileURL, for: provider)
+        // Read and validate through the same descriptor.
+        let audioData = try readAudioData(fileURL, for: provider)
 
-        // Route macOS provider to native speech recognition
+        // Native APIs reopen URLs. Use a private snapshot of the validated bytes.
         if provider == .macOS {
-            return try await transcribeWithMacOS(fileURL: fileURL, language: language)
-        }
-
-        // Read file data
-        let audioData: Data
-        do {
-            audioData = try Data(contentsOf: fileURL)
-        } catch {
-            throw FileTranscriptionError.readError(error)
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("stt_file_\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let snapshot = directory.appendingPathComponent("audio").appendingPathExtension(fileURL.pathExtension)
+            try audioData.write(to: snapshot, options: .withoutOverwriting)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: snapshot.path)
+            return try await transcribeWithMacOS(fileURL: snapshot, language: language)
         }
 
         // Get the appropriate STT model for the provider
@@ -94,32 +96,59 @@ final class FileTranscriptionService {
     ///   - url: File URL to validate
     ///   - provider: The provider to validate against
     func validateFile(_ url: URL, for provider: RealtimeSTTProvider) throws {
-        // Check file exists
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw FileTranscriptionError.fileNotFound
-        }
+        let file = try openValidatedFile(url, for: provider)
+        try? file.close()
+    }
 
+    /// Read through the checked descriptor with a hard cap, even if the file grows.
+    func readAudioData(_ url: URL, for provider: RealtimeSTTProvider) throws -> Data {
+        let file = try openValidatedFile(url, for: provider)
+        defer { try? file.close() }
+        let limit = provider.maxFileSizeMB * 1024 * 1024
+        var data = Data()
+        do {
+            while data.count <= limit {
+                let chunk = try file.read(upToCount: min(65_536, limit + 1 - data.count)) ?? Data()
+                if chunk.isEmpty { break }
+                data.append(chunk)
+            }
+        } catch {
+            throw FileTranscriptionError.readError(error)
+        }
+        guard data.count <= limit else {
+            throw FileTranscriptionError.fileTooLarge(maxMB: provider.maxFileSizeMB, actualMB: data.count / (1024 * 1024))
+        }
+        return data
+    }
+
+    private func openValidatedFile(_ url: URL, for provider: RealtimeSTTProvider) throws -> FileHandle {
         // Check extension
         let fileExtension = url.pathExtension.lowercased()
         guard supportedExtensions.contains(fileExtension) else {
             throw FileTranscriptionError.unsupportedFormat(fileExtension, supportedFormats: AudioFileSupport.formatHint)
         }
 
-        // Check file size against provider-specific limit
-        let maxFileSize = provider.maxFileSizeMB * 1024 * 1024
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-            if let fileSize = attributes[.size] as? Int {
-                if fileSize > maxFileSize {
-                    let actualMB = fileSize / (1024 * 1024)
-                    throw FileTranscriptionError.fileTooLarge(maxMB: provider.maxFileSizeMB, actualMB: actualMB)
-                }
-            }
-        } catch let error as FileTranscriptionError {
-            throw error
-        } catch {
+        let descriptor = open(url.path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            if errno == ENOENT { throw FileTranscriptionError.fileNotFound }
+            throw FileTranscriptionError.readError(NSError(domain: NSPOSIXErrorDomain, code: Int(errno)))
+        }
+        let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var metadata = stat()
+        guard fstat(descriptor, &metadata) == 0 else {
+            let error = NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            try? file.close()
             throw FileTranscriptionError.readError(error)
         }
+        guard metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) else {
+            try? file.close()
+            throw FileTranscriptionError.readError(NSError(domain: NSPOSIXErrorDomain, code: Int(EINVAL)))
+        }
+        guard metadata.st_size <= provider.maxFileSizeMB * 1024 * 1024 else {
+            try? file.close()
+            throw FileTranscriptionError.fileTooLarge(maxMB: provider.maxFileSizeMB, actualMB: Int(metadata.st_size / (1024 * 1024)))
+        }
+        return file
     }
 
     /// Get default STT model for file transcription
@@ -254,16 +283,22 @@ final class FileTranscriptionService {
         }
     }
 
-    /// Transcribe using SFSpeechURLRecognitionRequest (supports server-based recognition)
+    /// Transcribe using SFSpeechURLRecognitionRequest with on-device recognition only.
     private func transcribeWithSFSpeechRecognizer(fileURL: URL, locale: Locale) async throws -> TranscriptionResult {
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
             throw FileTranscriptionError.transcriptionFailed(
                 NSError(domain: "FileTranscription", code: -4, userInfo: [NSLocalizedDescriptionKey: "Speech recognition is not available for \(locale.identifier)"])
             )
         }
+        guard recognizer.supportsOnDeviceRecognition else {
+            throw FileTranscriptionError.transcriptionFailed(
+                NSError(domain: "FileTranscription", code: -5, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("On-device speech recognition is unavailable for this language.", comment: "Offline speech recognition unavailable")])
+            )
+        }
 
         let request = SFSpeechURLRecognitionRequest(url: fileURL)
         request.shouldReportPartialResults = false
+        request.requiresOnDeviceRecognition = true
 
         let state = RecognitionTaskState()
 

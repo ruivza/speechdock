@@ -82,7 +82,7 @@
             <direct-parameter type="text" description="The text to copy."/>
         </command>
 
-        <command name="paste text" code="SDckPsTx" description="Copy text and request a paste into the frontmost application. Returns inserted only when the result can be verified; otherwise returns copied to clipboard.">
+        <command name="paste text" code="SDckPsTx" description="Copy text to the clipboard for manual pasting. Returns copied to clipboard. Direct dictation uses SpeechDock Voice Input.">
             <cocoa class="SpeechDock.PasteTextCommand"/>
             <result type="text" description="inserted or copied to clipboard"/>
             <direct-parameter type="text" description="The text to paste."/>
@@ -98,7 +98,7 @@
             <cocoa class="SpeechDock.ShowQuickTranscriptionCommand"/>
         </command>
 
-        <command name="start quick transcription" code="SDckStQT" description="Start quick transcription using the floating mic button. Transcribed text is pasted when stopped.">
+        <command name="start quick transcription" code="SDckStQT" description="Start quick transcription using the floating mic button. Transcribed text is copied to the clipboard when stopped.">
             <cocoa class="SpeechDock.StartQuickTranscriptionCommand"/>
         </command>
 

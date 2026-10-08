@@ -172,6 +172,7 @@ final class AudioOutputManager {
         // interface) returns dataSize > MemoryLayout<AudioBufferList>.size because
         // the struct is variable-length (mBuffers is a trailing array), so a
         // fixed capacity:1 allocation would be overrun by AudioObjectGetPropertyData.
+        let capacity = dataSize
         let rawPointer = UnsafeMutableRawPointer.allocate(
             byteCount: Int(dataSize),
             alignment: MemoryLayout<AudioBufferList>.alignment
@@ -180,10 +181,8 @@ final class AudioOutputManager {
 
         let getStatus = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, rawPointer)
 
-        guard getStatus == noErr else { return false }
-
-        let bufferList = rawPointer.assumingMemoryBound(to: AudioBufferList.self).pointee
-        return bufferList.mNumberBuffers > 0
+        guard getStatus == noErr, dataSize <= capacity else { return false }
+        return audioStreamConfigurationHasBuffers(rawPointer, byteCount: dataSize)
     }
 
     /// Get device name and UID

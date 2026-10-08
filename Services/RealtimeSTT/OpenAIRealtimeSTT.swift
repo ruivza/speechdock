@@ -425,7 +425,6 @@ final class OpenAIRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
-                    self.apiKeyManager.noteHandshake(of: task, provider: .openAI)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
                         dprint("OpenAIRealtimeSTT: WebSocket receive error: \(error)")

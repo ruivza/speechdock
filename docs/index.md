@@ -1,113 +1,36 @@
 ---
 layout: default
-title: Home
+title: 使用指南
 nav_order: 1
 ---
 
-<p align="right"><a href="index_ja.html">日本語</a></p>
+# SpeechDock 使用指南
 
-<p align="center">
-  <img src="images/icon.png" alt="SpeechDock" width="128" height="128">
-</p>
+本说明针对 [ruivza/speechdock](https://github.com/ruivza/speechdock) 的当前实现重写。项目来源：[yohasebe/speechdock](https://github.com/yohasebe/speechdock)。原项目的历史说明请到原仓库查阅。
 
-# SpeechDock
-{: .text-center }
+SpeechDock 是 macOS 菜单栏语音工具，支持转录、朗读、实时字幕、OCR 与翻译。主程序和 Voice Input 输入法都运行在沙盒中。
 
-**Speak and listen, from anywhere on your Mac.**
-{: .text-center .fs-6 }
+## 文档
 
-[Download](https://github.com/yohasebe/SpeechDock/releases){: .btn .btn-primary .mr-2 }
-[View on GitHub](https://github.com/yohasebe/SpeechDock){: .btn }
-{: .text-center }
+- [开始使用与语音输入法](basics.md)
+- [系统权限与已授权却不可用的处理](permissions.md)
+- [隐私、历史和缓存](advanced.md)
+- [编译、签名与 Release](build-release.md)
+- [AppleScript 当前行为](applescript.md)
+- [日本語の概要](index_ja.md)
 
----
+## 安装
 
-## What is SpeechDock?
+正式安装包从 [本仓库 Releases](https://github.com/ruivza/speechdock/releases) 获取。发布包需要维护者自己的 Developer ID Application 签名、公证和更新签名；没有发布包时可按编译指南本机构建。
 
-**Hear any text on your screen** — Selected text, typed text, pasted content, or text captured via OCR from any screen region. If you can see it, SpeechDock can read it aloud.
+原作者的 Homebrew tap 和旧安装包不代表此分支。应用更新检查只使用本仓库的 appcast；首个签名版本发布前，更新源没有可安装条目。
 
-**Transcribe any audio on your Mac** — Your voice through the microphone, system-wide audio, or sound from a specific app. If your Mac can hear it, SpeechDock can turn it into text in real time.
+## 平台与语言
 
-A menu bar app that makes STT and TTS accessible from anywhere on your Mac with global hotkeys. Works immediately after installation — no API keys required; a language model may need to download on first use.
+系统要求 macOS 14+；开发构建使用 Xcode 26+。原生识别取决于语言和设备的本地支持，缺少模型时系统可能下载模型；macOS 14/15 不支持本地识别的语言会提示不可用。
 
----
+在设置的外观页面选择界面语言，完全退出再打开生效。支持跟随系统、简体中文、英语、日语、德语、法语、韩语。界面语言与识别、翻译语言分别设置。
 
-## Architecture
+## 授权范围
 
-<p align="center">
-  <img src="images/architecture.png" alt="SpeechDock Architecture" style="max-width: 720px;">
-</p>
-
----
-
-## Key Features
-
-### Speech-to-Text (STT)
-- **Any audio source** — Microphone, System Audio, or specific App Audio
-- **Real-time transcription** — See text as you speak
-- **Subtitle mode** — Floating overlay for presentations and meetings
-- **Quick transcription** — Floating mic button for instant dictation
-
-### Text-to-Speech (TTS)
-- **Any text source** — Type, paste, select in other apps, or OCR from screen
-- **Natural voices** — Use macOS built-in or cloud provider voices
-- **Speed control** — Adjust playback speed in real-time (0.5x to 2.0x)
-- **Save audio** — Export speech to audio files
-
-### Translation
-- **On-device translation** — No API keys required (macOS 26+)
-- **18+ languages** — Translate between major languages
-- **TTS integration** — Automatically read translated text
-
-### Cloud Providers (Optional)
-- **OpenAI** — GPT Realtime Whisper / GPT-4o Mini Transcribe (STT), GPT-4o Mini TTS (Dec 2025) (TTS)
-- **Google Gemini** — Gemini 2.5 Flash (STT), Gemini 3.8 Flash / Flash-Lite TTS (TTS)
-- **ElevenLabs** — Scribe v2 (STT), Eleven v3 (TTS)
-- **Grok (xAI)** — Grok STT (STT), Grok TTS (TTS)
-
----
-
-## Requirements
-
-- macOS 14.0 (Sonoma) or later
-- Apple Silicon Mac (M1/M2/M3/M4)
-
----
-
-## Documentation
-
-| Page | Description |
-|:-----|:------------|
-| [Basic Features](basics.html) | Installation, STT, TTS, OCR, Subtitles, Shortcuts |
-| [Advanced Features](advanced.html) | Cloud providers, API keys, File transcription |
-| [AppleScript](applescript.html) | Automation and scripting |
-
----
-
-## Screenshots
-
-<figure>
-  <img src="images/stt-panel.png" alt="STT Panel" style="max-width: 600px;">
-  <figcaption>Speech-to-Text Panel</figcaption>
-</figure>
-
-<figure>
-  <img src="images/tts-panel.png" alt="TTS Panel" style="max-width: 600px;">
-  <figcaption>Text-to-Speech Panel</figcaption>
-</figure>
-
-<figure>
-  <img src="images/quick-transcription.png" alt="Quick Transcription" style="max-width: 600px;">
-  <figcaption>Quick Transcription — Clicking the button stops recording and pastes the transcribed text at the cursor</figcaption>
-</figure>
-
-<figure>
-  <img src="images/subtitle-overlay.png" alt="Subtitle Mode" style="max-width: 100%;">
-  <figcaption>Subtitle Mode — Real-time transcription as floating subtitles</figcaption>
-</figure>
-
----
-
-## License
-
-SpeechDock is released under the [Apache License 2.0](https://github.com/yohasebe/SpeechDock/blob/main/LICENSE).
+麦克风用于录音；屏幕与系统音频录制用于 OCR、系统或应用音频。普通文字朗读不需要麦克风权限。Voice Input 输入法有自己的授权记录。详情见 [系统权限](permissions.md)。

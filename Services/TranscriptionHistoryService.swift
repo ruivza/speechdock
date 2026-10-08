@@ -36,22 +36,37 @@ struct TranscriptionHistoryEntry: Codable, Identifiable {
 @MainActor
 final class TranscriptionHistoryService {
     static let shared = TranscriptionHistoryService()
+    static let enabledPreference = "saveTranscriptionHistory"
 
     private let maxEntries = 50
     private let fileName = "transcription_history.json"
     private var entries: [TranscriptionHistoryEntry] = []
+    private let defaults: UserDefaults
+    private let directoryURL: URL?
 
-    private init() {
+    init(defaults: UserDefaults = .standard, directoryURL: URL? = nil) {
+        self.defaults = defaults
+        self.directoryURL = directoryURL
         loadHistory()
+    }
+
+    var isEnabled: Bool {
+        get { defaults.object(forKey: Self.enabledPreference) as? Bool ?? true }
+        set {
+            defaults.set(newValue, forKey: Self.enabledPreference)
+            entries.removeAll()
+            if newValue { loadHistory() }
+        }
     }
 
     /// Get all history entries (newest first)
     var allEntries: [TranscriptionHistoryEntry] {
-        entries
+        isEnabled ? entries : []
     }
 
     /// Add a new transcription to history
     func addEntry(text: String, provider: String) {
+        guard isEnabled else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -78,32 +93,41 @@ final class TranscriptionHistoryService {
     /// Clear all history
     func clearHistory() {
         entries.removeAll()
-        saveHistory()
+        guard let url = historyFileURL, FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            dprint("TranscriptionHistoryService: Failed to clear history: \(error)")
+        }
     }
 
     // MARK: - Persistence
 
     private var historyFileURL: URL? {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let appDir = directoryURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("SpeechDock", isDirectory: true) else {
             return nil
         }
-        let appDir = appSupport.appendingPathComponent("SpeechDock", isDirectory: true)
-
-        // Ensure directory exists
-        try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
 
         return appDir.appendingPathComponent(fileName)
     }
 
+    private func secureDirectory(for url: URL) throws {
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+    }
+
     private func loadHistory() {
-        guard let url = historyFileURL,
+        guard isEnabled, let url = historyFileURL,
               FileManager.default.fileExists(atPath: url.path) else {
             return
         }
 
         do {
+            try secureDirectory(for: url)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             let data = try Data(contentsOf: url)
-            entries = try JSONDecoder().decode([TranscriptionHistoryEntry].self, from: data)
+            entries = Array(try JSONDecoder().decode([TranscriptionHistoryEntry].self, from: data).prefix(maxEntries))
             dprint("TranscriptionHistoryService: Loaded \(entries.count) entries")
 
         } catch {
@@ -113,11 +137,13 @@ final class TranscriptionHistoryService {
     }
 
     private func saveHistory() {
-        guard let url = historyFileURL else { return }
+        guard isEnabled, let url = historyFileURL else { return }
 
         do {
+            try secureDirectory(for: url)
             let data = try JSONEncoder().encode(entries)
             try data.write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         } catch {
             dprint("TranscriptionHistoryService: Failed to save history: \(error)")
 

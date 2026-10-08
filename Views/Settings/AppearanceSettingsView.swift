@@ -2,11 +2,27 @@ import SwiftUI
 
 struct AppearanceSettingsView: View {
     @Environment(AppState.self) var appState
+    @AppStorage("interfaceLanguage") private var interfaceLanguage = ""
+    @State private var showLanguageRestartNotice = false
+    @State private var cacheCleared = false
 
     var body: some View {
         @Bindable var appState = appState
 
         Form {
+            Section("Language") {
+                Picker("Interface Language", selection: $interfaceLanguage) {
+                    ForEach(InterfaceLanguage.allCases) { language in
+                        Text(language.displayName).tag(language.rawValue)
+                    }
+                }
+                .onChange(of: interfaceLanguage) { _, value in
+                    (InterfaceLanguage(rawValue: value) ?? .system).apply()
+                    showLanguageRestartNotice = true
+                }
+                Text("Quit and reopen SpeechDock to apply the interface language. Speech and translation languages are configured separately.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -69,9 +85,25 @@ struct AppearanceSettingsView: View {
             } header: {
                 Text("Startup")
             }
+            Section("Cache") {
+                Button(cacheCleared ? NSLocalizedString("Cache Cleared", comment: "Cache status") : NSLocalizedString("Clear Cache", comment: "Cache action")) {
+                    appState.stopTTS()
+                    for provider in TTSProvider.allCases { TTSVoiceCache.shared.clearCache(for: provider) }
+                    URLCache.shared.removeAllCachedResponses()
+                    cacheCleared = true
+                }
+                .disabled(appState.ttsState == .loading || appState.ttsState == .speaking || appState.ttsState == .paused)
+                Text("Clears voice lists and network cache. Temporary audio is cleaned automatically. History, API keys, saved audio and Apple language models are kept.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .scrollIndicators(.visible)
+        .alert("Restart Required", isPresented: $showLanguageRestartNotice) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Quit and reopen SpeechDock to apply the interface language.")
+        }
     }
 }
 

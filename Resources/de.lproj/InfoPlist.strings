@@ -2,6 +2,5 @@
 
 "NSMicrophoneUsageDescription" = "SpeechDock benötigt Mikrofonzugriff, um Ihre Stimme für die Transkription aufzunehmen.";
 "NSSpeechRecognitionUsageDescription" = "SpeechDock verwendet Spracherkennung für die Echtzeit-Transkription.";
-"NSScreenCaptureUsageDescription" = "SpeechDock benötigt Bildschirmaufnahme-Zugriff, um Fenstervorschauen bei der Auswahl eines Einfügeziels anzuzeigen.";
-"NSAppleEventsUsageDescription" = "SpeechDock benötigt Automatisierungszugriff, um ausgewählten Text aus anderen Anwendungen für die Sprachsynthese zu kopieren.";
+"NSScreenCaptureUsageDescription" = "SpeechDock benötigt die Bildschirmaufnahme-Berechtigung für OCR und die Aufnahme von System- oder App-Audio.";
 "NSHumanReadableCopyright" = "Copyright \U00A9 2026 Yoichiro Hasebe. All rights reserved.";

@@ -154,7 +154,6 @@ final class OpenAITTS: NSObject, TTSService {
             throw TTSError.apiError("Invalid response type")
         }
 
-        APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: "OpenAI")
         guard httpResponse.statusCode == 200 else {
             streamingPlayer.stop()
             // Try to read error message

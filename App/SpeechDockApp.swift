@@ -32,7 +32,7 @@ struct SpeechDockApp: App {
             // Replace default Help command to open GitHub documentation
             CommandGroup(replacing: .help) {
                 Button("SpeechDock Help") {
-                    if let url = URL(string: "https://github.com/yohasebe/speechdock") {
+                    if let url = URL(string: "https://github.com/ruivza/speechdock") {
                         NSWorkspace.shared.open(url)
                     }
                 }

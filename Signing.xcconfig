@@ -1,0 +1,2 @@
+// Keep account-specific settings local; command-line settings can override them.
+#include? "Signing.local.xcconfig"

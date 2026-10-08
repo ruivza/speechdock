@@ -62,7 +62,7 @@ final class FloatingWindowManager: ObservableObject {
     /// Currently selected window for text insertion
     @Published var selectedWindow: WindowInfo?
     /// When true, only copy to clipboard without pasting to a window
-    @Published var clipboardOnly: Bool = false
+    @Published var clipboardOnly: Bool = true
 
     /// Alert state for invalid paste destination
     @Published var showDestinationAlert: Bool = false
@@ -151,40 +151,9 @@ final class FloatingWindowManager: ObservableObject {
 
     /// Refresh the list of available windows
     func refreshAvailableWindows() {
-        var windows = WindowService.shared.getAvailableWindows()
-
-        // Sort so that the previous app's windows are at the top
-        if let previousApp = previousApp {
-            let previousPID = previousApp.processIdentifier
-            windows.sort { w1, w2 in
-                let w1IsPrevious = w1.ownerPID == previousPID
-                let w2IsPrevious = w2.ownerPID == previousPID
-                if w1IsPrevious && !w2IsPrevious {
-                    return true
-                } else if !w1IsPrevious && w2IsPrevious {
-                    return false
-                } else {
-                    // Both same priority, sort by app name then window title
-                    return (w1.ownerName, w1.windowTitle) < (w2.ownerName, w2.windowTitle)
-                }
-            }
-        }
-
-        availableWindows = windows
-
-        // Keep current selection if it still exists in the list, otherwise select first
-        if !clipboardOnly {
-            if let current = selectedWindow,
-               availableWindows.contains(where: { $0.id == current.id }) {
-                // Current selection still valid, keep it
-            } else {
-                // Select first window only if no valid selection exists
-                selectedWindow = availableWindows.first
-            }
-        }
-
-        // Start loading thumbnails asynchronously
-        loadThumbnailsAsync()
+        availableWindows = []
+        selectedWindow = nil
+        clipboardOnly = true
     }
 
     /// Load thumbnails for all available windows asynchronously
@@ -700,21 +669,10 @@ final class FloatingWindowManager: ObservableObject {
         self.previousApp = nil
         self.availableWindows = []
         self.selectedWindow = nil
-        self.clipboardOnly = false
+        self.clipboardOnly = true
 
         if let window = floatingWindow { ActivationPolicyCoordinator.shared.windowDidHide(window) }
     }
 
-    /// Activate the selected window and return success status
-    func activateSelectedWindow() -> Bool {
-        guard let window = selectedWindow else {
-            // Fall back to previous app (.activateIgnoringOtherApps is deprecated
-            // and a no-op since macOS 14)
-            if let previousApp = previousApp {
-                return previousApp.activate(options: [])
-            }
-            return false
-        }
-        return WindowService.shared.activateWindow(window)
-    }
+
 }

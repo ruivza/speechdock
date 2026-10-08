@@ -10,6 +10,13 @@ struct AudioInputDevice: Identifiable, Equatable, Hashable {
     static let systemDefault = AudioInputDevice(id: 0, name: "System Default", uid: "")
 }
 
+/// A zero-stream AudioBufferList can contain only its header. Loading the whole
+/// Swift struct would also read its first trailing AudioBuffer beyond that header.
+func audioStreamConfigurationHasBuffers(_ data: UnsafeRawPointer, byteCount: UInt32) -> Bool {
+    guard byteCount >= MemoryLayout<UInt32>.size else { return false }
+    return data.load(as: UInt32.self) > 0
+}
+
 /// Manages audio input device selection
 final class AudioInputManager {
     static let shared = AudioInputManager()
@@ -115,6 +122,7 @@ final class AudioInputManager {
         // interface) returns dataSize > MemoryLayout<AudioBufferList>.size because
         // the struct is variable-length (mBuffers is a trailing array), so a
         // fixed capacity:1 allocation would be overrun by AudioObjectGetPropertyData.
+        let capacity = dataSize
         let rawPointer = UnsafeMutableRawPointer.allocate(
             byteCount: Int(dataSize),
             alignment: MemoryLayout<AudioBufferList>.alignment
@@ -123,10 +131,8 @@ final class AudioInputManager {
 
         let getStatus = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, rawPointer)
 
-        guard getStatus == noErr else { return false }
-
-        let bufferList = rawPointer.assumingMemoryBound(to: AudioBufferList.self).pointee
-        return bufferList.mNumberBuffers > 0
+        guard getStatus == noErr, dataSize <= capacity else { return false }
+        return audioStreamConfigurationHasBuffers(rawPointer, byteCount: dataSize)
     }
 
     /// Get device name and UID

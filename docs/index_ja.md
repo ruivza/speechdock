@@ -1,115 +1,19 @@
 ---
 layout: default
-title: ホーム
-nav_exclude: true
-search_exclude: true
+title: 日本語の概要
+nav_order: 7
 lang: ja
 ---
 
-<p align="right"><a href="index.html">English</a></p>
+# SpeechDock このフォークの使い方
 
-<p align="center">
-  <img src="images/icon.png" alt="SpeechDock" width="128" height="128">
-</p>
+このページは現在の実装に合わせて書き直しました。原プロジェクトは [yohasebe/speechdock](https://github.com/yohasebe/speechdock) です。古い仕様や配布情報は原リポジトリを参照してください。
 
-# SpeechDock
-{: .text-center }
+- 文字起こし、読み上げ、OCR、字幕、翻訳をメニューバーから利用できます。
+- 通常の文字起こしはコピーして手動で貼り付けます。直接入力には Voice Input 入力メソッドを選択し、Control + Option + R で開始・終了、Esc でキャンセルします。
+- アプリと入力メソッドは別々の沙盒と権限を持ちます。Debug 版とリリース版の権限も別です。
+- 表示言語は外観設定で変更し、完全に終了して再起動すると適用されます。
+- 履歴は最大 50 件のローカル平文です。保存の停止と削除を別々に選択できます。1Password 連携は削除しました。
+- このフォークのダウンロードと更新は [ruivza/speechdock](https://github.com/ruivza/speechdock) から提供します。
 
-**Speak and listen, from anywhere on your Mac.**
-{: .text-center .fs-6 }
-
-[ダウンロード](https://github.com/yohasebe/SpeechDock/releases){: .btn .btn-primary .mr-2 }
-[GitHub](https://github.com/yohasebe/SpeechDock){: .btn }
-{: .text-center }
-
----
-
-## SpeechDockとは？
-
-**画面上のあらゆるテキストを音声に** — 選択テキスト、直接入力、ペースト、画面からのOCRキャプチャ。見えるテキストなら、SpeechDockが読み上げます。
-
-**Macのあらゆる音声をテキストに** — マイクからの声、システム全体の音声、特定アプリの音声。Macが聞ける音なら、SpeechDockがリアルタイムで文字起こしします。
-
-メニューバーに常駐し、グローバルホットキーでどこからでもアクセス可能。インストール後すぐに使え、APIキーは不要です。初回は言語モデルのダウンロードが必要になる場合があります。
-
----
-
-## アーキテクチャ
-
-<p align="center">
-  <img src="images/architecture.png" alt="SpeechDock アーキテクチャ" style="max-width: 720px;">
-</p>
-
----
-
-## 主な機能
-
-### 音声認識 (STT)
-- **あらゆる音声ソース** — マイク、システム音声、特定のアプリ音声
-- **リアルタイム文字起こし** — 話しながらテキストを確認
-- **字幕モード** — プレゼンや会議用のフローティングオーバーレイ
-- **クイック入力** — フローティングマイクボタンで即座に音声入力
-
-### 音声合成 (TTS)
-- **あらゆるテキストソース** — 直接入力、ペースト、他アプリで選択、画面からOCR
-- **自然な音声** — macOS内蔵またはクラウドプロバイダの音声
-- **速度調整** — リアルタイムで再生速度を調整（0.5x〜2.0x）
-- **音声保存** — 音声をファイルにエクスポート
-
-### 翻訳
-- **オンデバイス翻訳** — APIキー不要（macOS 26以降）
-- **18以上の言語** — 主要言語間で翻訳
-- **TTS連携** — 翻訳テキストを自動的に読み上げ
-
-### クラウドプロバイダ（オプション）
-- **OpenAI** — GPT Realtime Whisper / GPT-4o Mini Transcribe（STT）、GPT-4o Mini TTS (Dec 2025)（TTS）
-- **Google Gemini** — Gemini 2.5 Flash（STT）、Gemini 3.8 Flash / Flash-Lite TTS（TTS）
-- **ElevenLabs** — Scribe v2（STT）、Eleven v3（TTS）
-- **Grok (xAI)** — Grok STT（STT）、Grok TTS（TTS）
-
----
-
-## 動作環境
-
-- macOS 14.0 (Sonoma) 以降
-- Apple Silicon Mac (M1/M2/M3/M4)
-
----
-
-## ドキュメント
-
-| ページ | 説明 |
-|:-------|:-----|
-| [基本機能](basics_ja.html) | インストール、STT、TTS、OCR、字幕、ショートカット |
-| [高度な機能](advanced_ja.html) | クラウドプロバイダ、APIキー、ファイル文字起こし |
-| [AppleScript](applescript_ja.html) | 自動化とスクリプティング |
-
----
-
-## スクリーンショット
-
-<figure>
-  <img src="images/stt-panel.png" alt="STT Panel" style="max-width: 600px;">
-  <figcaption>音声認識パネル</figcaption>
-</figure>
-
-<figure>
-  <img src="images/tts-panel.png" alt="TTS Panel" style="max-width: 600px;">
-  <figcaption>音声合成パネル</figcaption>
-</figure>
-
-<figure>
-  <img src="images/quick-transcription.png" alt="Quick Transcription" style="max-width: 600px;">
-  <figcaption>クイック入力 — ボタンをクリックすると録音が停止し、文字起こしテキストがカーソル位置にペーストされます</figcaption>
-</figure>
-
-<figure>
-  <img src="images/subtitle-overlay.png" alt="Subtitle Mode" style="max-width: 100%;">
-  <figcaption>字幕モード — リアルタイム文字起こしをフローティング字幕として表示</figcaption>
-</figure>
-
----
-
-## ライセンス
-
-SpeechDockは[Apache License 2.0](https://github.com/yohasebe/SpeechDock/blob/main/LICENSE)の下で公開されています。
+現在の詳細説明：[開始する](basics.md)、[権限](permissions.md)、[プライバシーとキャッシュ](advanced.md)、[ビルドと署名](build-release.md)、[AppleScript](applescript.md)。

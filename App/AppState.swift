@@ -551,10 +551,6 @@ final class AppState {
         PermissionService.shared.microphoneGranted
     }
 
-    var hasAccessibilityPermission: Bool {
-        PermissionService.shared.accessibilityGranted
-    }
-
     var hasScreenRecordingPermission: Bool {
         PermissionService.shared.screenRecordingGranted
     }
@@ -649,6 +645,8 @@ final class AppState {
     /// Prefetch available apps for App Audio in background (non-blocking)
     /// This preloads SCShareableContent and app icons to avoid delay on first menu open
     private func prefetchAvailableAppsInBackground() {
+        // Background warming must not request Screen Recording on first launch.
+        guard hasScreenRecordingPermission else { return }
         Task {
             await systemAudioCaptureService.refreshAvailableApps()
         }
@@ -817,8 +815,9 @@ final class AppState {
     /// Start recording (can be called from panel button or auto-start)
     func startRecording() {
         guard !isProcessing && !isRecording && transcriptionState != .preparing else { return }
-        let feature: PermissionFeature = selectedAudioInputSourceType == .microphone ? .microphoneRecording : .systemAudioRecording
-        guard PermissionService.shared.ensureAccess(for: feature) else { return }
+        if selectedAudioInputSourceType == .microphone {
+            guard PermissionService.shared.ensureAccess(for: .microphoneRecording) else { return }
+        }
 
         // Mutual exclusivity: close TTS panel and stop TTS if active
         if showTTSWindow || ttsState == .speaking || ttsState == .paused || ttsState == .loading {
@@ -899,6 +898,21 @@ final class AppState {
     }
 
     private func startRealtimeSTT() async {
+        let effectiveSourceType = selectedAudioInputSourceType
+        if effectiveSourceType == .microphone {
+            guard PermissionService.shared.ensureAccess(for: .microphoneRecording) else {
+                transcriptionState = .error(NSLocalizedString("Microphone access is needed to record speech. You can still use text to speech without it.", comment: "Recording permission guidance"))
+                return
+            }
+        } else {
+            guard await PermissionService.shared.ensureScreenRecordingAccess(for: .systemAudioRecording),
+                  !Task.isCancelled else {
+                if !Task.isCancelled {
+                    transcriptionState = .error(NSLocalizedString("Screen capture is unavailable in this session. Check permissions for this app, then restart it if needed.", comment: "Screen capture permission guidance"))
+                }
+                return
+            }
+        }
         // Clean up any existing service before creating a new one (defensive measure)
         realtimeSTTService?.stopListening()
         realtimeSTTService = nil
@@ -918,8 +932,6 @@ final class AppState {
         }
 
         // Keep the requested source; missing access is handled before recording starts.
-        let effectiveSourceType = selectedAudioInputSourceType
-
         switch effectiveSourceType {
         case .microphone:
             realtimeSTTService?.audioSource = .microphone
@@ -1125,64 +1137,14 @@ final class AppState {
     }
 
     private func hideWindowAndPaste(_ text: String) {
-        // Apply text replacement rules
         let processedText = TextReplacementService.shared.applyReplacements(to: text)
-
-        // Check if clipboard-only mode
-        if floatingWindowManager.clipboardOnly {
-            // Just copy to clipboard, no paste
-            ClipboardService.shared.copyToClipboard(processedText)
-            if closePanelAfterPaste {
-                floatingWindowManager.hideFloatingWindow(skipActivation: false)
-                showFloatingWindow = false
-            }
-            transcriptionState = .idle
-            return
-        }
-
-        // Validate paste destination before proceeding
-        let status = floatingWindowManager.validatePasteDestination()
-        if status != .valid {
-            // Destination is invalid - alert is shown by validatePasteDestination
-            // Don't close the window, let user select a new destination
-            return
-        }
-
-        // Activate the selected window before hiding
-        let activated = floatingWindowManager.activateSelectedWindow()
-
+        ClipboardService.shared.copyToClipboard(processedText)
+        ClipboardNotice.shared.showCopied()
         if closePanelAfterPaste {
-            // Close panel and paste (original behavior)
-            floatingWindowManager.hideFloatingWindow(skipActivation: activated)
+            floatingWindowManager.hideFloatingWindow(skipActivation: false)
             showFloatingWindow = false
-            transcriptionState = .idle
-
-            // Delay paste to allow window to close and focus to switch
-            let delay = activated ? 0.4 : 0.3
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                await ClipboardService.shared.copyAndPaste(processedText)
-            }
-        } else {
-            // Keep panel open: paste and return focus to panel
-            transcriptionState = .idle
-
-            // Temporarily hide panel to allow paste
-            floatingWindowManager.temporarilyHideWindow()
-
-            // Delay paste to allow focus to switch
-            let delay = activated ? 0.3 : 0.2
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                await ClipboardService.shared.copyAndPaste(processedText)
-
-                // Bring panel back after paste completes
-                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
-                await MainActor.run {
-                    self?.floatingWindowManager.bringToFront()
-                }
-            }
         }
+        transcriptionState = .idle
     }
 
     // MARK: - TTS Methods
@@ -1207,13 +1169,8 @@ final class AppState {
         // Stop any existing TTS before starting a new session
         stopTTSPlayback()
 
-        // Show the panel immediately for snappy perceived open latency, even when
-        // selected text retrieval takes 200-800ms (e.g. for browsers). For hotkey-
-        // triggered TTS, `precopiedText` is already populated synchronously by
-        // `ttsHotKeyPressed`, so the panel appears with the text right away. For
-        // menu-bar TTS, the panel appears empty first and is populated when the
-        // async text fetch completes below.
-        let initialText = precopiedText ?? ""
+        // Read only text the user copied; show an empty editor if none is available.
+        let initialText = precopiedText ?? ClipboardTextReader.shared.readBestTextFromPasteboard() ?? ""
         ttsText = initialText
         ttsState = .idle
         if !showTTSWindow || !floatingWindowManager.isVisible {
@@ -1222,8 +1179,7 @@ final class AppState {
             floatingWindowManager.bringToFront()
         }
 
-        // If text was already supplied by the caller, trigger auto-speak and skip
-        // the async retrieval — there is no further text to load.
+        // Respect the existing auto-speak preference for copied or supplied text.
         if !initialText.isEmpty {
             dprint("TTS: Using precopied text, length: \(initialText.count)")
             if ttsAutoSpeak {
@@ -1232,35 +1188,6 @@ final class AppState {
             return
         }
 
-        guard hasAccessibilityPermission else { return }
-
-        // Otherwise retrieve selected text from the frontmost app in the background
-        // and populate the panel when it arrives. The user can also start typing
-        // in the meantime; if they do, we won't overwrite their input.
-        //
-        // Thread-safety note: `AppState` is `@MainActor`, so this `Task` inherits
-        // MainActor isolation. The `ttsText.isEmpty` check and the subsequent
-        // `ttsText = fetched` assignment run as a single atomic unit of work on
-        // the main actor — any user typing that modifies `ttsText` is serialized
-        // with this block, so there is no read-modify-write race in practice.
-        Task {
-            guard let fetched = await TextSelectionService.shared.getSelectedText(from: frontmostApp),
-                  !fetched.isEmpty else {
-                dprint("TTS: No selected text retrieved; panel ready for manual input")
-                return
-            }
-            dprint("TTS: Got selected text, length: \(fetched.count)")
-
-            // Only populate if the panel text is still empty (user hasn't typed)
-            guard ttsText.isEmpty else {
-                dprint("TTS: Panel already has user-entered text; skipping auto-populate")
-                return
-            }
-            ttsText = fetched
-            if ttsAutoSpeak {
-                speakCurrentText()
-            }
-        }
     }
 
     /// Show TTS panel with text, respecting auto-speak setting
@@ -1580,7 +1507,6 @@ final class AppState {
 
     /// Start OCR region selection
     func startOCR() {
-        guard PermissionService.shared.ensureAccess(for: .ocr) else { return }
         // Close any open STT or TTS panels first
         if showFloatingWindow || isRecording || transcriptionState == .preparing {
             cancelRecording()
@@ -2268,74 +2194,9 @@ extension AppState: HotKeyServiceDelegate {
     }
 
     nonisolated func ttsHotKeyPressed() {
-        // Capture frontmost app IMMEDIATELY before any async scheduling
-        let frontmostApp = NSWorkspace.shared.frontmostApplication
-
-        // Skip if SpeechDock itself is frontmost (no text to copy from ourselves)
-        let isSpeechDockFrontmost = frontmostApp?.bundleIdentifier == Bundle.main.bundleIdentifier
-        dprint("TTS HotKey: Captured frontmost app: \(frontmostApp?.localizedName ?? "none") (bundle: \(frontmostApp?.bundleIdentifier ?? "none")), isSpeechDock: \(isSpeechDockFrontmost)")
-
-
-        // Run the copy sequence as an async task so the hotkey callback thread is
-        // not blocked by Thread.sleep. The wait durations and the clipboard
-        // save/restore timing are kept identical to the previous implementation.
         Task { @MainActor in
-            var copiedText: String? = nil
-
-            if !isSpeechDockFrontmost, let targetApp = frontmostApp {
-                // Save original clipboard content before overwriting
-                let savedClipboardState = ClipboardService.shared.saveClipboardState()
-
-                // Ensure target app is activated and has keyboard focus
-                targetApp.activate()
-                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms for activation
-
-                // Send Cmd+C while target app is frontmost
-                let clipboardChangeCount = NSPasteboard.general.changeCount
-                self.sendCopyCommand()
-
-                // Wait for copy to complete
-                try? await Task.sleep(nanoseconds: 150_000_000)  // 150ms for clipboard
-
-                // Check if clipboard was updated
-                let newChangeCount = NSPasteboard.general.changeCount
-                if newChangeCount != clipboardChangeCount {
-                    // Read the best available text representation, preferring HTML/RTF
-                    // so that paragraph breaks are preserved (plain text collapses them)
-                    copiedText = TextSelectionService.shared.readBestTextFromPasteboard()
-                }
-                dprint("TTS HotKey: Clipboard changed: \(newChangeCount != clipboardChangeCount), text length: \(copiedText?.count ?? 0)")
-
-
-                // Restore original clipboard content after capturing text
-                if copiedText != nil {
-                    ClipboardService.shared.restoreClipboardState(savedClipboardState)
-                    dprint("TTS HotKey: Restored original clipboard content")
-
-                }
-            }
-
-            self.toggleTTS(frontmostApp: frontmostApp, precopiedText: copiedText)
+            self.toggleTTS(precopiedText: ClipboardTextReader.shared.readBestTextFromPasteboard())
         }
-    }
-
-    /// Send Cmd+C via CGEvent (called synchronously from hotkey handler)
-    private nonisolated func sendCopyCommand() {
-        let keyCodeC: CGKeyCode = 8
-        let source = CGEventSource(stateID: .hidSystemState)
-
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCodeC, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCodeC, keyDown: false) else {
-            return
-        }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-        dprint("TTS HotKey: Sent Cmd+C immediately")
-
     }
 
     nonisolated func ocrHotKeyPressed() {

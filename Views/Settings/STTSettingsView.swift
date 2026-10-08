@@ -359,8 +359,8 @@ struct STTPanelBehaviorSettings: View {
 
             Toggle(isOn: $appState.closePanelAfterPaste) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Close panel after paste")
-                    Text("When enabled, the STT panel closes automatically after pasting text.")
+                    Text("Close panel after copy")
+                    Text("When enabled, the STT panel closes automatically after copying text.")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }

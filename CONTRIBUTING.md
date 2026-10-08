@@ -1,151 +1,49 @@
-# Contributing to SpeechDock
+# 开发与贡献
 
-Thank you for your interest in contributing to SpeechDock! This document provides guidelines and instructions for contributing.
+本分支维护在 [ruivza/speechdock](https://github.com/ruivza/speechdock)，来源为 [yohasebe/speechdock](https://github.com/yohasebe/speechdock)。保留 Apache License 2.0 和原作者版权说明。
 
-## Development Setup
+## 本机开发
 
-### Prerequisites
+使用 macOS 14+、Xcode 26+ 和 XcodeGen。所有应用 target 共用 `Signing.xcconfig`，它仅可选加载被 Git 忽略的 `Signing.local.xcconfig`。
 
-- macOS 14.0 (Sonoma) or later
-- Xcode 16.0 or later
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (for regenerating project files)
+1. 复制 `Signing.local.xcconfig.example` 为 `Signing.local.xcconfig`，把占位符换成自己的 Team ID。
+2. 在 Xcode 登录 Apple Account，确保本机有匹配的 Apple Development 证书及私钥。
+3. 运行 `xcodegen generate`，打开项目并选择 SpeechDock scheme。
+4. Debug 使用 `SpeechDock Dev` 和独立 Bundle ID，系统授权与正式版分别保存。
 
-### Getting Started
+不要把真实 Team ID、完整个人证书名称、私钥、API 密钥或本机路径加入共享配置。生成的 Xcode 项目、证书文件和本机签名配置不上传。
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yohasebe/speechdock.git
-   cd speechdock
-   ```
-
-2. **Generate the Xcode project**
-   ```bash
-   xcodegen generate
-   ```
-
-3. **Open in Xcode**
-   ```bash
-   open SpeechDock.xcodeproj
-   ```
-
-4. **Build and run**
-   - Select the `SpeechDock` scheme
-   - Press `Cmd+R` to build and run
-
-### Project Structure
-
-```
-speechdock/
-├── App/                    # Application entry point and state
-│   ├── AppDelegate.swift   # App lifecycle management
-│   ├── AppState.swift      # Central state management
-│   └── SpeechDockApp.swift   # SwiftUI app entry
-├── Models/                 # Data models
-├── Services/               # Business logic and API integrations
-│   ├── RealtimeSTT/        # Speech-to-text services
-│   └── TTS/                # Text-to-speech services
-├── Views/                  # SwiftUI views
-│   ├── FloatingWindow/     # Floating panel views
-│   └── Settings/           # Settings views
-├── Resources/              # Assets and configuration files
-├── Tests/                  # Unit tests
-└── scripts/                # Build and deployment scripts
-```
-
-## Code Style
-
-### Swift Guidelines
-
-- Use Swift's native types and conventions
-- Follow the [Swift API Design Guidelines](https://swift.org/documentation/api-design-guidelines/)
-- Use `@MainActor` for UI-related code
-- Prefer `async/await` over completion handlers
-- Use meaningful variable and function names
-
-### Documentation
-
-- Add documentation comments (`///`) for public APIs
-- Include brief descriptions for complex logic
-- Keep comments up-to-date with code changes
-
-### Error Handling
-
-- Use Swift's error handling (`throw`, `try`, `catch`)
-- Provide meaningful error messages
-- Log errors appropriately (use `#if DEBUG` for debug-only logs)
-
-## Testing
-
-### Running Tests
+## 检查
 
 ```bash
-xcodebuild test -scheme SpeechDock -destination 'platform=macOS'
+xcodegen generate
+xcodebuild test -project SpeechDock.xcodeproj -scheme SpeechDock -destination 'platform=macOS'
+ruby scripts/lint/check_tracked_paths.rb
+git diff --check
 ```
 
-Or in Xcode: `Cmd+U`
+测试可以用命令行 `CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=` 运行，但本机实际录音或屏幕捕获应使用稳定的开发证书。自动测试不能代替真实 macOS 权限、输入法安装和云端服务验收。
 
-### Writing Tests
+## 发布
 
-- Place test files in the `Tests/` directory
-- Name test files with the `Tests` suffix (e.g., `KeychainServiceTests.swift`)
-- Test both success and failure cases
-- Use descriptive test method names
+[编译与发布指南](docs/build-release.md) 说明 Developer ID Application、公证和 Sparkle 更新签名。CI 只使用 GitHub Secrets 中的凭据；任何人的 Apple 账户都不会写入源码。仓库中的 Sparkle 公钥用于验证更新，属于可公开数据。
 
-## Pull Request Process
+## 文档与 Wiki
 
-1. **Create a feature branch**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+当前文档源在 `docs/`。修改说明时同步实际界面和权限行为，删除失效的原项目说明；需要查阅原项目历史时链接到原仓库。
 
-2. **Make your changes**
-   - Write clean, well-documented code
-   - Add tests for new functionality
-   - Ensure all existing tests pass
+```bash
+python3 scripts/sync-wiki.py --preview /tmp/speechdock-wiki-preview
+python3 scripts/sync-wiki.py --repository ruivza/speechdock
+```
 
-3. **Commit your changes**
-   - Use clear, descriptive commit messages
-   - Follow the format: `Type: brief description`
-   - Types: `Add` (new feature), `Fix` (bug fix), `Update` (improvement), `Refactor` (restructure), `Remove` (deletion)
+第一次同步前需在 GitHub Wiki 创建首页。同步会替换 Wiki 当前所有页面，Git 历史保留以便恢复；不会 force push。签名资料与转录内容禁止进入文档。
 
-4. **Push and create a PR**
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-   - Open a pull request on GitHub
-   - Fill in the PR template
-   - Link any related issues
+## 代码布局
 
-5. **Code Review**
-   - Address review feedback
-   - Keep the PR focused and reasonably sized
-
-## Reporting Issues
-
-### Bug Reports
-
-When reporting bugs, please include:
-- macOS version
-- SpeechDock version
-- Steps to reproduce
-- Expected vs actual behavior
-- Relevant logs or screenshots
-
-### Feature Requests
-
-For feature requests, please describe:
-- The problem you're trying to solve
-- Your proposed solution
-- Any alternatives you've considered
-
-## License
-
-By contributing to SpeechDock, you agree that your contributions will be licensed under the Apache License 2.0.
-
-## Questions?
-
-If you have questions, feel free to:
-- Open a GitHub issue
-- Check existing issues and discussions
-
-Thank you for contributing!
+- `App/`、`Views/`：生命周期、状态和 SwiftUI 界面。
+- `Services/`、`Models/`、`Utilities/`：音频、翻译、存储与通用逻辑。
+- `InputMethod/`：独立 InputMethodKit 语音输入法。
+- `Resources/`：权限配置、资源和六种语言。
+- `Tests/`：回归测试；涉及授权与异步结果时覆盖取消、拒绝和失效路径。
+- `scripts/`、`.github/workflows/`：构建、路径检查、公证和发布。

@@ -52,21 +52,9 @@ struct PermissionSetupView: View {
                     .padding(.horizontal, 32)
 
                 permissionRow(
-                    icon: "hand.raised.fill",
-                    name: NSLocalizedString("Accessibility", comment: "Permission name"),
-                    description: NSLocalizedString("For inserting text into other apps", comment: "Accessibility permission description"),
-                    badge: .recommended,
-                    status: permissionService.accessibilityGranted ? .granted : .notGranted,
-                    action: { permissionService.openAccessibilitySettings() }
-                )
-
-                Divider()
-                    .padding(.horizontal, 32)
-
-                permissionRow(
                     icon: "rectangle.dashed.badge.record",
                     name: NSLocalizedString("Screen Recording", comment: "Permission name"),
-                    description: NSLocalizedString("For OCR, system/app audio capture and window thumbnails", comment: "Screen recording permission description"),
+                    description: NSLocalizedString("For OCR and system/app audio capture", comment: "Screen recording permission description"),
                     badge: .optional,
                     status: permissionService.screenRecordingGranted ? .granted : .notGranted,
                     action: { permissionService.openScreenRecordingSettings() }
@@ -74,7 +62,24 @@ struct PermissionSetupView: View {
             }
             .padding(.vertical, 12)
 
-            Text("If Screen Recording is enabled in System Settings but still unavailable here, restart SpeechDock.")
+            Text(String(format: NSLocalizedString("Grant access to %@ in System Settings. The main app and Voice Input have separate permissions. After rebuilding or changing signing, remove the old entry and allow the current app again if necessary.", comment: "Current app permission identity"), Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "SpeechDock"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 28)
+
+            HStack {
+                Button("Check Again") {
+                    permissionService.refreshAllPermissions()
+                    Task { await permissionService.refreshScreenRecordingPermission() }
+                }
+                .disabled(permissionService.isCheckingScreenRecording)
+                Button("Show This App in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                }
+            }
+            .padding(.top, 8)
+
+            Text("If permissions are enabled but unavailable in this session, quit SpeechDock completely and reopen it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 28)
@@ -102,9 +107,8 @@ struct PermissionSetupView: View {
             }
             .padding(.vertical, 16)
         }
-        .frame(width: 540, height: 530)
+        .frame(width: 540, height: 610)
         .animation(.snappy, value: permissionService.microphoneGranted)
-        .animation(.snappy, value: permissionService.accessibilityGranted)
         .animation(.snappy, value: permissionService.screenRecordingGranted)
     }
 
@@ -175,7 +179,7 @@ struct PermissionSetupView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(status.label).font(.caption).foregroundStyle(.secondary)
                     Button(action: action) {
-                        Text(status == .notRequested ? "Allow" : "Open Settings")
+                        Text(status == .notRequested ? NSLocalizedString("Allow", comment: "Request permission") : NSLocalizedString("Open Settings", comment: "Open privacy settings"))
                             .font(.caption)
                     }
                     .buttonStyle(.bordered)

@@ -263,7 +263,7 @@ struct TranslationControls: View {
         .fixedSize()
         .disabled(!canChangeSettings)
         .opacity(canChangeSettings ? 1.0 : 0.5)
-        .help(canChangeSettings ? "Target language: \(targetLanguageDisplayName)" : "Cannot change during translation")
+        .help(canChangeSettings ? String(format: NSLocalizedString("Target language: %@", comment: "Translation target"), targetLanguageDisplayName) : NSLocalizedString("Cannot change during translation", comment: "Translation busy"))
     }
 
     // MARK: - Provider Selector
@@ -300,7 +300,7 @@ struct TranslationControls: View {
         .menuStyle(.borderlessButton)
         .disabled(!canChangeSettings)
         .opacity(canChangeSettings ? 1.0 : 0.5)
-        .help(canChangeSettings ? "Translation provider: \(provider.displayName)" : "Cannot change during translation")
+        .help(canChangeSettings ? String(format: NSLocalizedString("Translation provider: %@", comment: "Translation provider"), provider.displayName) : NSLocalizedString("Cannot change during translation", comment: "Translation busy"))
     }
 
     // MARK: - Model Selector
@@ -332,7 +332,7 @@ struct TranslationControls: View {
         .menuStyle(.borderlessButton)
         .disabled(!canChangeSettings)
         .opacity(canChangeSettings ? 1.0 : 0.5)
-        .help(canChangeSettings ? "Translation model: \(currentModel?.name ?? "")" : "Cannot change during translation")
+        .help(canChangeSettings ? String(format: NSLocalizedString("Translation model: %@", comment: "Translation model"), currentModel?.name ?? "") : NSLocalizedString("Cannot change during translation", comment: "Translation busy"))
     }
 
     // MARK: - Helper Properties

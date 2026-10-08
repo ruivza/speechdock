@@ -231,7 +231,6 @@ enum TTSAPIHelper {
                 }
 
                 // Success
-                APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: providerName)
 
                 if httpResponse.statusCode == 200 {
                     return (data, httpResponse)

@@ -524,7 +524,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
                     }
 
                     #if DEBUG
-                    debugLog("SpeechAnalyzerSTT: Received result - isFinal: \(result.isFinal), text: '\(currentText)'")
+                    debugLog("SpeechAnalyzerSTT: Received result - isFinal: \(result.isFinal), characters: \(currentText.count)")
                     #endif
 
                     await MainActor.run { [currentText] in
@@ -548,7 +548,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
                                 }
                             }
                             #if DEBUG
-                            debugLog("SpeechAnalyzerSTT: Notifying FINAL: '\(fullTranscription)'")
+                            debugLog("SpeechAnalyzerSTT: Notifying FINAL: \(fullTranscription.count) characters")
                             #endif
                             self.delegate?.realtimeSTT(self, didReceiveFinalResult: fullTranscription)
                             self.lastTranscription = currentText
@@ -556,7 +556,7 @@ final class SpeechAnalyzerSTT: NSObject, RealtimeSTTService {
                             // Volatile result - show combined text but don't accumulate yet
                             if fullTranscription != self.lastTranscription {
                                 #if DEBUG
-                                debugLog("SpeechAnalyzerSTT: Notifying PARTIAL: '\(fullTranscription)'")
+                                debugLog("SpeechAnalyzerSTT: Notifying PARTIAL: \(fullTranscription.count) characters")
                                 #endif
                                 self.delegate?.realtimeSTT(self, didReceivePartialResult: fullTranscription)
                                 self.lastTranscription = fullTranscription

@@ -98,9 +98,10 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
         // Write text to temp file
         let tempTextFile = FileManager.default.temporaryDirectory.appendingPathComponent("tts_text_\(UUID().uuidString).txt")
         try text.write(to: tempTextFile, atomically: true, encoding: .utf8)
+        var keepGeneratedAudio = false
         defer {
             try? FileManager.default.removeItem(at: tempTextFile)
-            if synthesis.generation != generation { try? FileManager.default.removeItem(at: audioFile) }
+            if !keepGeneratedAudio || synthesis.generation != generation { try? FileManager.default.removeItem(at: audioFile) }
         }
 
         // Generate audio file using say command
@@ -188,6 +189,7 @@ final class MacOSTTS: NSObject, TTSService, @unchecked Sendable {
         } catch {
             throw TTSError.audioError("Failed to play audio: \(error.localizedDescription)")
         }
+        keepGeneratedAudio = true
     }
 
     /// Play using AVAudioPlayer (system default output)

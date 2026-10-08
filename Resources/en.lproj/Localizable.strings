@@ -546,20 +546,108 @@
 /* Translation row */
 "Translation:" = "Translation:";
 
-/* API keys: 1Password references */
-"1Password CLI (op) was not found" = "1Password CLI (op) was not found";
-"1Password CLI is not signed in" = "1Password CLI is not signed in";
-"1Password access was not approved" = "1Password access was not approved";
-"1Password item was not found" = "1Password item was not found";
-"1Password did not respond in time" = "1Password did not respond in time";
-"1Password reference could not be read" = "1Password reference could not be read";
 "%@ API key: %@" = "%@ API key: %@";
 "%@ API key not found" = "%@ API key not found";
-"Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain." = "Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain.";
-"Reload from 1Password" = "Reload from 1Password";
 "From Environment (%@, older name)" = "From Environment (%@, older name)";
 "From Environment (%@)" = "From Environment (%@)";
-"1Password: read" = "1Password: read";
-"1Password: read when first used" = "1Password: read when first used";
-"Use the form op://vault/item/field" = "Use the form op://vault/item/field";
-"1Password CLI (op) could not be verified" = "1Password CLI (op) could not be verified";
+
+/* API key storage */
+"Enter your API keys below to store them securely in macOS Keychain. Environment variables are also supported." = "Enter your API keys below to store them securely in macOS Keychain. Environment variables are also supported.";
+"Enter the API key itself, not a URL." = "Enter the API key itself, not a URL.";
+
+/* History and speech privacy */
+"Save Transcription History" = "Save Transcription History";
+"History is saved locally without encryption. Clear History removes saved entries." = "History is saved locally without encryption. Clear History removes saved entries.";
+"On-device speech recognition is unavailable for this language." = "On-device speech recognition is unavailable for this language.";
+"Cloud subtitle translation sends the current cumulative transcript and up to two previous original/translation pairs to the selected provider." = "Cloud subtitle translation sends the current cumulative transcript and up to two previous original/translation pairs to the selected provider.";
+
+/* Sandboxed voice input */
+"Set Up Voice Input Method…" = "Set Up Voice Input Method…";
+
+/* Sandboxed main app */
+"Read Copied Text" = "Read Copied Text";
+"Close panel after copy" = "Close panel after copy";
+
+"Text copied. Paste manually, or use SpeechDock Voice Input for direct dictation." = "Text copied. Paste manually, or use SpeechDock Voice Input for direct dictation.";
+
+"When enabled, the STT panel closes automatically after copying text." = "When enabled, the STT panel closes automatically after copying text.";
+
+"For OCR and system/app audio capture" = "For OCR and system/app audio capture";
+
+/* Interface, permission rechecks and voice input */
+"SpeechDock Permissions" = "SpeechDock Permissions";
+"Grant access to %@ in System Settings. The main app and Voice Input have separate permissions. After rebuilding or changing signing, remove the old entry and allow the current app again if necessary." = "Grant access to %@ in System Settings. The main app and Voice Input have separate permissions. After rebuilding or changing signing, remove the old entry and allow the current app again if necessary.";
+"Check Again" = "Check Again";
+"Show This App in Finder" = "Show This App in Finder";
+"If permissions are enabled but unavailable in this session, quit SpeechDock completely and reopen it." = "If permissions are enabled but unavailable in this session, quit SpeechDock completely and reopen it.";
+"Recommended" = "Recommended";
+"Optional" = "Optional";
+"Open Settings" = "Open Settings";
+"Translation provider, model, and target language used by both the panel Translate button and subtitle real-time translation." = "Translation provider, model, and target language used by both the panel Translate button and subtitle real-time translation.";
+"Interface Language" = "Interface Language";
+"Quit and reopen SpeechDock to apply the interface language. Speech and translation languages are configured separately." = "Quit and reopen SpeechDock to apply the interface language. Speech and translation languages are configured separately.";
+"Cache" = "Cache";
+"Cache Cleared" = "Cache Cleared";
+"Clear Cache" = "Clear Cache";
+"Clears voice lists and network cache. Temporary audio is cleaned automatically. History, API keys, saved audio and Apple language models are kept." = "Clears voice lists and network cache. Temporary audio is cleaned automatically. History, API keys, saved audio and Apple language models are kept.";
+"Quit and reopen SpeechDock to apply the interface language." = "Quit and reopen SpeechDock to apply the interface language.";
+"SpeechDock works without API keys using macOS built-in STT/TTS. Cloud providers below are optional and offer additional voices, models, and languages." = "SpeechDock works without API keys using macOS built-in STT/TTS. Cloud providers below are optional and offer additional voices, models, and languages.";
+"About API Keys" = "About API Keys";
+"Unsupported file format: .%@\n\nSupported formats: %@" = "Unsupported file format: .%@\n\nSupported formats: %@";
+"Save Failed" = "Save Failed";
+"Screen Recording permission required" = "Screen Recording permission required";
+"Shows HUD while recording" = "Shows HUD while recording";
+"Copies text when done" = "Copies text when done";
+"Hide Button" = "Hide Button";
+"Transcription failed" = "Transcription failed";
+"Screen capture is unavailable in this session. Check permissions for this app, then restart it if needed." = "Screen capture is unavailable in this session. Check permissions for this app, then restart it if needed.";
+"Could Not Save Audio" = "Could Not Save Audio";
+"SpeechDock Help" = "SpeechDock Help";
+"Unavailable in this session" = "Unavailable in this session";
+"On-device, ~18 languages" = "On-device, ~18 languages";
+"100+ languages, high quality" = "100+ languages, high quality";
+"Top" = "Top";
+"Bottom" = "Bottom";
+"The voice input component is missing or invalid. Rebuild or reinstall SpeechDock." = "The voice input component is missing or invalid. Rebuild or reinstall SpeechDock.";
+"The Input Methods directory must be owned by this user, not a symbolic link, and not writable by other users." = "The Input Methods directory must be owned by this user, not a symbolic link, and not writable by other users.";
+"SpeechDock Voice Input is already installed. To update it, switch to another input source, remove the old component from ~/Library/Input Methods in Finder, then install again and log out." = "SpeechDock Voice Input is already installed. To update it, switch to another input source, remove the old component from ~/Library/Input Methods in Finder, then install again and log out.";
+"Choose your ~/Library/Input Methods folder to install SpeechDock Voice Input, then add it under System Settings → Keyboard → Text Input → Edit → + → English. Recognition runs locally without Accessibility permission. Select it and press ⌃⌥R to start/finish; Esc cancels." = "Choose your ~/Library/Input Methods folder to install SpeechDock Voice Input, then add it under System Settings → Keyboard → Text Input → Edit → + → English. Recognition runs locally without Accessibility permission. Select it and press ⌃⌥R to start/finish; Esc cancels.";
+"Install" = "Install";
+"Choose your Input Methods folder" = "Choose your Input Methods folder";
+"Choose ~/Library/Input Methods. Create the folder here if needed." = "Choose ~/Library/Input Methods. Create the folder here if needed.";
+"Install Here" = "Install Here";
+"SpeechDock Voice Input installed" = "SpeechDock Voice Input installed";
+"Add it in Keyboard → Text Input → Edit → + → English. If it is not listed, log out and back in. Choose Voice Input Settings… in the input menu to set the speech language." = "Add it in Keyboard → Text Input → Edit → + → English. If it is not listed, log out and back in. Choose Voice Input Settings… in the input menu to set the speech language.";
+"Open Keyboard Settings" = "Open Keyboard Settings";
+"Done" = "Done";
+"Voice input installation failed" = "Voice input installation failed";
+"Preparing speech recognition…" = "Preparing speech recognition…";
+"Allow microphone access in System Settings, then try again." = "Allow microphone access in System Settings, then try again.";
+"Listening — ⌃⌥R to insert, Esc to cancel" = "Listening — ⌃⌥R to insert, Esc to cancel";
+"Recording cancelled after five minutes." = "Recording cancelled after five minutes.";
+"Finishing speech recognition…" = "Finishing speech recognition…";
+"Input destination changed. Recording cancelled." = "Input destination changed. Recording cancelled.";
+"No speech recognized." = "No speech recognized.";
+"Recording exceeded the text limit and was cancelled." = "Recording exceeded the text limit and was cancelled.";
+"Apple Speech (offline, max 100MB)" = "Apple Speech (offline, max 100MB)";
+"SpeechDock Voice Input" = "SpeechDock Voice Input";
+"SpeechDock Voice Input Settings" = "SpeechDock Voice Input Settings";
+"Select SpeechDock Voice Input in the macOS input menu. Press ⌃⌥R to start, then press it again to insert the result. Esc cancels. Changing the input destination cancels the recording.\n\nRecognition runs on-device. Unsupported languages fail without cloud fallback. Apple may download language models. Recordings and transcripts are not saved." = "Select SpeechDock Voice Input in the macOS input menu. Press ⌃⌥R to start, then press it again to insert the result. Esc cancels. Changing the input destination cancels the recording.\n\nRecognition runs on-device. Unsupported languages fail without cloud fallback. Apple may download language models. Recordings and transcripts are not saved.";
+"Speech language:" = "Speech language:";
+"Start / Finish Voice Input (⌃⌥R)" = "Start / Finish Voice Input (⌃⌥R)";
+"Cancel Voice Input" = "Cancel Voice Input";
+"Voice Input Settings…" = "Voice Input Settings…";
+"Log out and back in to apply the input method interface language." = "Log out and back in to apply the input method interface language.";
+"SpeechDock" = "SpeechDock";
+"GitHub" = "GitHub";
+"GitHub Sponsors" = "GitHub Sponsors";
+"Buy Me a Coffee" = "Buy Me a Coffee";
+"Ko-fi" = "Ko-fi";
+"© 2026 Yoichiro Hasebe" = "© 2026 Yoichiro Hasebe";
+"A" = "A";
+"1s" = "1s";
+"5s" = "5s";
+"10s" = "10s";
+"60s" = "60s";
+"0.5x" = "0.5x";
+"2.0x" = "2.0x";

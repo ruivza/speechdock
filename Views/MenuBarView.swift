@@ -173,6 +173,15 @@ struct MenuBarView: View {
             .disabled(appState.isRecording || appState.transcriptionState == .transcribingFile)
 
             // Transcription History submenu
+            Button(action: {
+                StatusBarManager.shared.closePanel()
+                InputMethodInstallationService.presentSetup()
+            }) {
+                Label("Set Up Voice Input Method…", systemImage: "keyboard")
+                    .font(.callout)
+            }
+            .buttonStyle(MenuBarActionButtonStyle())
+
             TranscriptionHistoryMenu(appState: appState)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -187,15 +196,6 @@ struct MenuBarView: View {
                 .padding(.horizontal, 8)
                 .padding(.top, 2)
                 .padding(.bottom, 2)
-
-            // Accessibility permission warning
-            if !appState.hasAccessibilityPermission {
-                permissionWarning(
-                    icon: "hand.raised.slash",
-                    text: "Accessibility is used to capture selected text",
-                    action: openAccessibilitySettings
-                )
-            }
 
             // Screen Recording permission warning
             if !appState.hasScreenRecordingPermission {
@@ -218,7 +218,7 @@ struct MenuBarView: View {
                     Image(systemName: "speaker.wave.2")
                         .foregroundColor(.accentColor)
                         .frame(width: 20)
-                    Text("Text to Speech")
+                    Text("Read Copied Text")
                         .font(.callout)
                         .foregroundColor(.primary)
                     Spacer()
@@ -375,11 +375,6 @@ struct MenuBarView: View {
         PermissionService.shared.openMicrophoneSettings()
     }
 
-    private func openAccessibilitySettings() {
-        StatusBarManager.shared.closePopover()
-        PermissionService.shared.openAccessibilitySettings()
-    }
-
     private func openScreenRecordingSettings() {
         StatusBarManager.shared.closePopover()
         PermissionService.shared.openScreenRecordingSettings()
@@ -394,8 +389,8 @@ struct MenuBarView: View {
         StatusBarManager.shared.closePopover()
         let isJapanese = Locale.preferredLanguages.first?.hasPrefix("ja") == true
         let urlString = isJapanese
-            ? "https://yohasebe.github.io/speechdock/index_ja.html"
-            : "https://yohasebe.github.io/speechdock/"
+            ? "https://github.com/ruivza/speechdock/blob/main/docs/index_ja.md"
+            : "https://github.com/ruivza/speechdock/blob/main/docs/index.md"
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
@@ -441,9 +436,17 @@ struct MenuBarActionButtonStyle: ButtonStyle {
 struct TranscriptionHistoryMenu: View {
     var appState: AppState
     @State private var entries: [TranscriptionHistoryEntry] = []
+    @AppStorage(TranscriptionHistoryService.enabledPreference) private var saveHistory = true
 
     var body: some View {
         Menu {
+            Toggle("Save Transcription History", isOn: Binding(get: { saveHistory }, set: { enabled in
+                    saveHistory = enabled
+                    TranscriptionHistoryService.shared.isEnabled = enabled
+                    entries = TranscriptionHistoryService.shared.allEntries
+                }))
+                .help("History is saved locally without encryption. Clear History removes saved entries.")
+            Divider()
             if entries.isEmpty {
                 Text(NSLocalizedString("No history", comment: "Empty transcription history"))
                     .foregroundColor(.secondary)
@@ -460,16 +463,15 @@ struct TranscriptionHistoryMenu: View {
                     }
                 }
 
-                Divider()
-
-                Button(action: {
-                    TranscriptionHistoryService.shared.clearHistory()
-                    entries = []
-                }) {
-                    HStack {
-                        Image(systemName: "trash")
-                        Text(NSLocalizedString("Clear History", comment: "Clear transcription history button"))
-                    }
+            }
+            Divider()
+            Button(action: {
+                TranscriptionHistoryService.shared.clearHistory()
+                entries = []
+            }) {
+                HStack {
+                    Image(systemName: "trash")
+                    Text(NSLocalizedString("Clear History", comment: "Clear transcription history button"))
                 }
             }
         } label: {

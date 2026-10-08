@@ -196,7 +196,7 @@ struct FloatingMicButtonView: View {
 
         // Info about how it works
         Label("Shows HUD while recording", systemImage: "text.bubble")
-        Label("Pastes text when done", systemImage: "doc.on.clipboard")
+        Label("Copies text when done", systemImage: "doc.on.clipboard")
 
         Divider()
 

@@ -224,35 +224,6 @@ enum RealtimeSTTProvider: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// Factory for creating realtime STT services
-enum RealtimeSTTFactory {
-    @MainActor
-    static func makeService(for provider: RealtimeSTTProvider) -> RealtimeSTTService {
-        switch provider {
-        case .macOS:
-            // Use SpeechAnalyzer on macOS 26+ for better performance and no time limit
-            // SpeechAnalyzerSTT requires Swift 6.1+ compiler (macOS 26 SDK)
-            #if compiler(>=6.1)
-            if #available(macOS 26, *) {
-                return SpeechAnalyzerSTT()
-            } else {
-                return MacOSRealtimeSTT()
-            }
-            #else
-            return MacOSRealtimeSTT()
-            #endif
-        case .openAI:
-            return OpenAIRealtimeSTT()
-        case .gemini:
-            return GeminiRealtimeSTT()
-        case .elevenLabs:
-            return ElevenLabsRealtimeSTT()
-        case .grok:
-            return GrokRealtimeSTT()
-        }
-    }
-}
-
 extension RealtimeSTTDelegate {
     func realtimeSTT(_ service: RealtimeSTTService, didUpdatePreparation message: String?) {}
 }

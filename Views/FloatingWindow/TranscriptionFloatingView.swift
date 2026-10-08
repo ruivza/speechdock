@@ -1281,35 +1281,13 @@ struct TranscriptionFloatingView: View {
         HStack(spacing: 8) {
             // Target + Paste group
             HStack(spacing: 4) {
-                // Target selector
-                CompactWindowSelectorButton(
-                    floatingWindowManager: appState.floatingWindowManager,
-                    isExpanded: $isWindowSelectorExpanded,
-                    onToggle: {
-                        if !isWindowSelectorExpanded {
-                            appState.floatingWindowManager.refreshAvailableWindows()
-                            dropdownId = UUID()
-                        }
-                        isWindowSelectorExpanded.toggle()
-                    }
-                )
-                .popover(isPresented: $isWindowSelectorExpanded) {
-                    WindowSelectorDropdown(
-                        floatingWindowManager: appState.floatingWindowManager,
-                        isExpanded: $isWindowSelectorExpanded
-                    )
-                    .id(dropdownId)
-                    .frame(width: 500, height: 400)
-                    .padding()
-                }
-
                 // Paste button
                 if case .recording = appState.transcriptionState {
                     if !editedText.isEmpty {
                         Button {
                             AppState.shared.stopRecordingAndInsert(editedText)
                         } label: {
-                            CompactButtonLabel(title: "Paste", shortcut: "", icon: "doc.on.clipboard")
+                            CompactButtonLabel(title: "Copy", shortcut: "", icon: "doc.on.clipboard")
                                 .background(Color.secondary.opacity(0.1))
                                 .cornerRadius(4)
                         }
@@ -1320,7 +1298,7 @@ struct TranscriptionFloatingView: View {
                     Button {
                         onConfirm(editedText)
                     } label: {
-                        CompactButtonLabel(title: "Paste", shortcut: "", icon: "doc.on.clipboard")
+                        CompactButtonLabel(title: "Copy", shortcut: "", icon: "doc.on.clipboard")
                             .background(Color.secondary.opacity(0.1))
                             .cornerRadius(4)
                     }
@@ -1552,8 +1530,10 @@ struct AudioInputSourceSelector: View {
 
             // System Audio option (requires Screen Recording permission)
             Button(action: {
-                guard PermissionService.shared.ensureAccess(for: .systemAudioRecording) else { return }
-                appState.selectedAudioInputSourceType = .systemAudio
+                Task {
+                    guard await PermissionService.shared.ensureScreenRecordingAccess(for: .systemAudioRecording) else { return }
+                    appState.selectedAudioInputSourceType = .systemAudio
+                }
             }) {
                 Label("System Audio", systemImage: AudioInputSourceType.systemAudio.icon)
                 if appState.selectedAudioInputSourceType == .systemAudio {
@@ -1604,7 +1584,11 @@ struct AudioInputSourceSelector: View {
                 }
             } else {
                 Button {
-                    PermissionService.shared.ensureAccess(for: .systemAudioRecording)
+                    Task {
+                        guard await PermissionService.shared.ensureScreenRecordingAccess(for: .systemAudioRecording) else { return }
+                        await appState.systemAudioCaptureService.refreshAvailableApps()
+                        availableApps = appState.systemAudioCaptureService.availableApps
+                    }
                 } label: {
                     Label("App Audio", systemImage: AudioInputSourceType.applicationAudio.icon)
                 }

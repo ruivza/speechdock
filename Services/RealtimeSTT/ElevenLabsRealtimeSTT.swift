@@ -262,7 +262,6 @@ final class ElevenLabsRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
-                    self.apiKeyManager.noteHandshake(of: task, provider: .elevenLabs)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
                         if self.isListening && !self.isIntentionallyStopping {

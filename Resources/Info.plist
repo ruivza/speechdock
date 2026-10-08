@@ -8,6 +8,8 @@
     <string>$(SPEECHDOCK_DISPLAY_NAME)</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleShortVersionString</key>
@@ -27,9 +29,7 @@
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>SpeechDock uses speech recognition for real-time transcription.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>SpeechDock needs screen recording access to show window thumbnails when selecting a paste target.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>SpeechDock needs automation access to copy selected text from other applications for text-to-speech.</string>
+    <string>SpeechDock needs screen recording access for OCR and system/app audio capture.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Yoichiro Hasebe. All rights reserved.</string>
     <key>NSHighResolutionCapable</key>
@@ -43,10 +43,12 @@
 
     <!-- Sparkle Auto-Update Configuration -->
     <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/yohasebe/speechdock/main/appcast.xml</string>
+    <string>https://raw.githubusercontent.com/ruivza/speechdock/main/appcast.xml</string>
     <key>SUPublicEDKey</key>
-    <string>MAa/lGpJrjLYjp2nTFS1HgMEyPaazjwbxyVsQqtIZ9A=</string>
+    <string>A8eXgN+wvWLXQ4mfhitO/XuL9hXIxmAEcNCx+eB2yrU=</string>
     <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUEnableInstallerLauncherService</key>
     <true/>
 </dict>
 </plist>

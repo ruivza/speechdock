@@ -241,7 +241,7 @@ struct TTSVoicePicker: View {
         guard TTSVoiceCache.shared.isCacheExpired(for: .elevenLabs) else { return }
 
         Task {
-            await ElevenLabsTTS.fetchAndCacheVoices(readingReference: true)
+            await ElevenLabsTTS.fetchAndCacheVoices()
             loadVoices()
         }
     }
@@ -251,7 +251,7 @@ struct TTSVoicePicker: View {
 
         isRefreshing = true
         Task {
-            await ElevenLabsTTS.fetchAndCacheVoices(readingReference: true)
+            await ElevenLabsTTS.fetchAndCacheVoices()
             loadVoices()
             isRefreshing = false
         }

@@ -61,6 +61,9 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
             }
         }
 
+        // Permission dialogs may outlive the input session that requested them.
+        try Task.checkCancellation()
+
         guard authStatus == .authorized else {
             throw RealtimeSTTError.permissionDenied("Speech recognition permission denied")
         }
@@ -71,6 +74,9 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             throw RealtimeSTTError.serviceUnavailable("Speech recognizer not available")
         }
+        guard recognizer.supportsOnDeviceRecognition else {
+            throw RealtimeSTTError.serviceUnavailable(NSLocalizedString("On-device speech recognition is unavailable for this language.", comment: "Offline speech recognition unavailable"))
+        }
 
         // Stop any existing session (but don't clear accumulated text if restarting)
         if !isRestarting {
@@ -79,11 +85,8 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
         }
 
         // Create recognition request
-        let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        let recognitionRequest = Self.makeRecognitionRequest()
         self.recognitionRequest = recognitionRequest
-
-        recognitionRequest.shouldReportPartialResults = true
-        recognitionRequest.addsPunctuation = true
 
         // Setup audio engine only for microphone mode (and not during restart)
         if audioSource == .microphone && !isRestarting {
@@ -240,9 +243,7 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
 
         // Create new recognition request BEFORE ending old one (for audio buffer continuity)
         // The audio tap will start sending to the new request immediately
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        recognitionRequest?.shouldReportPartialResults = true
-        recognitionRequest?.addsPunctuation = true
+        recognitionRequest = Self.makeRecognitionRequest()
 
         // Now safely end the old request/task
         oldRequest?.endAudio()
@@ -270,10 +271,21 @@ final class MacOSRealtimeSTT: NSObject, RealtimeSTTService {
         }
     }
 
+    static func makeRecognitionRequest() -> SFSpeechAudioBufferRecognitionRequest {
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.addsPunctuation = true
+        request.requiresOnDeviceRecognition = true
+        return request
+    }
+
     /// Start listening using the already-created recognition request (for seamless restart)
     private func startListeningWithExistingRequest() async throws {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             throw RealtimeSTTError.serviceUnavailable("Speech recognizer not available")
+        }
+        guard recognizer.supportsOnDeviceRecognition else {
+            throw RealtimeSTTError.serviceUnavailable(NSLocalizedString("On-device speech recognition is unavailable for this language.", comment: "Offline speech recognition unavailable"))
         }
 
         guard let recognitionRequest = recognitionRequest else {

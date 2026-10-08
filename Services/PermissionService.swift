@@ -1,9 +1,9 @@
 import AppKit
 import AVFoundation
-import ApplicationServices
+import ScreenCaptureKit
 
 /// Reactive permission monitoring service.
-/// Monitors Microphone, Accessibility, and Screen Recording permissions
+/// Monitors Microphone and Screen Recording permissions
 /// and updates state in real-time via polling and system notifications.
 @Observable
 @MainActor
@@ -12,14 +12,19 @@ final class PermissionService {
 
     // MARK: - Permission State
 
-    private(set) var snapshot = PermissionSnapshot(microphone: .notRequested, accessibility: false, screenRecording: false)
+    private(set) var snapshot = PermissionSnapshot(microphone: .notRequested, screenRecording: false)
     var microphoneGranted: Bool { snapshot.microphone == .granted }
-    var accessibilityGranted: Bool { snapshot.accessibility }
     var screenRecordingGranted: Bool { snapshot.screenRecording }
     var microphoneStatus: PermissionAccessStatus { snapshot.microphone }
 
     private let defaults: UserDefaults
     private let readPermissions: () -> PermissionSnapshot
+    private let requestMicrophoneAccess: () async -> Bool
+    private let verifyScreenRecording: () async -> Bool
+    private var verifiedScreenRecording: Bool?
+    private var screenVerificationGeneration = 0
+    private var verifyScreenOnActivation = false
+    private(set) var isCheckingScreenRecording = false
     private static let setupCompletedKey = "permissionSetupCompleted"
     var shouldShowSetupOnLaunch: Bool { hasAnyMissing && !defaults.bool(forKey: Self.setupCompletedKey) }
 
@@ -39,7 +44,7 @@ final class PermissionService {
     }
 
     /// All permissions are granted
-    var allGranted: Bool { microphoneGranted && accessibilityGranted && screenRecordingGranted }
+    var allGranted: Bool { microphoneGranted && screenRecordingGranted }
 
     /// Whether any permission is missing
     var hasAnyMissing: Bool { !allGranted }
@@ -54,10 +59,19 @@ final class PermissionService {
 
     init(defaults: UserDefaults = .standard, readPermissions: @escaping () -> PermissionSnapshot = {
         PermissionSnapshot(microphone: .microphone(AVCaptureDevice.authorizationStatus(for: .audio)),
-                           accessibility: AXIsProcessTrusted(), screenRecording: CGPreflightScreenCaptureAccess())
+                           screenRecording: CGPreflightScreenCaptureAccess())
+    }, requestMicrophoneAccess: @escaping () async -> Bool = {
+        await AVCaptureDevice.requestAccess(for: .audio)
+    }, verifyScreenRecording: @escaping () async -> Bool = {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+            return !content.displays.isEmpty
+        } catch { return false }
     }) {
         self.defaults = defaults
         self.readPermissions = readPermissions
+        self.requestMicrophoneAccess = requestMicrophoneAccess
+        self.verifyScreenRecording = verifyScreenRecording
         refreshAllPermissions()
     }
 
@@ -66,6 +80,38 @@ final class PermissionService {
     /// Refresh all permission states immediately
     func refreshAllPermissions() {
         snapshot = readPermissions()
+        // A successful ScreenCaptureKit check is authoritative even when the
+        // legacy preflight is stale. Feature entry always performs a fresh check.
+        if let verifiedScreenRecording { snapshot.screenRecording = verifiedScreenRecording }
+    }
+
+    @discardableResult
+    func refreshScreenRecordingPermission() async -> Bool {
+        screenVerificationGeneration += 1
+        let generation = screenVerificationGeneration
+        isCheckingScreenRecording = true
+        let granted = await verifyScreenRecording()
+        guard generation == screenVerificationGeneration else { return false }
+        isCheckingScreenRecording = false
+        guard !Task.isCancelled else { return false }
+        verifiedScreenRecording = granted
+        refreshAllPermissions()
+        return granted
+    }
+
+    /// Call only after a capture action or an explicit permission recheck.
+    func ensureScreenRecordingAccess(for feature: PermissionFeature,
+                                     showSetup: ((String) -> Void)? = nil) async -> Bool {
+        let expectedGeneration = screenVerificationGeneration + 1
+        let granted = await refreshScreenRecordingPermission()
+        guard expectedGeneration == screenVerificationGeneration, !Task.isCancelled else { return false }
+        guard granted else {
+            let reason = NSLocalizedString("Screen capture is unavailable in this session. Check permissions for this app, then restart it if needed.", comment: "Screen capture permission guidance")
+            if let showSetup { showSetup(reason) }
+            else { PermissionSetupController.shared.show(reason: reason) }
+            return false
+        }
+        return true
     }
 
     // MARK: - Monitoring
@@ -131,7 +177,12 @@ final class PermissionService {
             // Delay slightly to allow TCC database to update
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 250_000_000) // 250ms
-                self?.refreshAllPermissions()
+                guard let self, self.isMonitoring else { return }
+                self.refreshAllPermissions()
+                if self.verifyScreenOnActivation || self.verifiedScreenRecording != nil {
+                    self.verifyScreenOnActivation = false
+                    await self.refreshScreenRecordingPermission()
+                }
             }
         }
     }
@@ -142,13 +193,12 @@ final class PermissionService {
     /// Returns true if permission was granted.
     @discardableResult
     func requestMicrophone() async -> Bool {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        if status == .notDetermined {
-            let granted = await AVCaptureDevice.requestAccess(for: .audio)
-            refreshAllPermissions()
-            return granted
+        refreshAllPermissions()
+        if microphoneStatus == .notRequested {
+            _ = await requestMicrophoneAccess()
         }
-        return status == .authorized
+        refreshAllPermissions()
+        return microphoneGranted
     }
 
     // MARK: - Open System Settings
@@ -157,11 +207,8 @@ final class PermissionService {
         openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
     }
 
-    func openAccessibilitySettings() {
-        openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    }
-
     func openScreenRecordingSettings() {
+        verifyScreenOnActivation = true
         openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     }
 

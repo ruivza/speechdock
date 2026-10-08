@@ -30,7 +30,7 @@ struct AboutSettingsView: View {
             // Links
             HStack(spacing: 16) {
                 Button(action: {
-                    if let url = URL(string: "https://github.com/yohasebe/SpeechDock") {
+                    if let url = URL(string: "https://github.com/ruivza/speechdock") {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
@@ -43,7 +43,7 @@ struct AboutSettingsView: View {
                 .buttonStyle(.link)
 
                 Button(action: {
-                    if let url = URL(string: "https://github.com/yohasebe/speechdock") {
+                    if let url = URL(string: "https://github.com/ruivza/speechdock") {
                         NSWorkspace.shared.open(url)
                     }
                 }) {

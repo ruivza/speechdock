@@ -6,9 +6,9 @@ final class PermissionServiceTests: XCTestCase {
 
     // MARK: - Computed Properties
 
-    func testAllGrantedRequiresAllThree() {
+    func testAllGrantedRequiresMicrophoneAndScreenRecording() {
         let service = PermissionService.shared
-        if service.microphoneGranted && service.accessibilityGranted && service.screenRecordingGranted {
+        if service.microphoneGranted && service.screenRecordingGranted {
             XCTAssertTrue(service.allGranted)
         } else {
             XCTAssertFalse(service.allGranted)
@@ -29,7 +29,6 @@ final class PermissionServiceTests: XCTestCase {
         service.refreshAllPermissions()
         // Verify properties are accessible after refresh
         _ = service.microphoneGranted
-        _ = service.accessibilityGranted
         _ = service.screenRecordingGranted
     }
 
@@ -80,7 +79,6 @@ final class PermissionServiceTests: XCTestCase {
         // If all granted, none should be missing
         if service.allGranted {
             XCTAssertTrue(service.microphoneGranted)
-            XCTAssertTrue(service.accessibilityGranted)
             XCTAssertTrue(service.screenRecordingGranted)
             XCTAssertFalse(service.hasAnyMissing)
         }

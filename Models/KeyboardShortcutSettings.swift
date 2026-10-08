@@ -201,6 +201,9 @@ struct CustomShortcut: Codable, Equatable {
 
 /// Identifiers for all customizable shortcuts
 enum ShortcutAction: String, CaseIterable, Codable {
+    // Decode old settings, but hide the retired target selection action.
+    static var availableActions: [Self] { allCases.filter { $0 != .sttTargetSelect } }
+
     // STT Panel shortcuts
     case sttRecord = "stt_record"
     case sttStop = "stt_stop"
@@ -223,7 +226,7 @@ enum ShortcutAction: String, CaseIterable, Codable {
         switch self {
         case .sttRecord: return NSLocalizedString("Record", comment: "Shortcut action")
         case .sttStop: return NSLocalizedString("Stop Recording", comment: "Shortcut action")
-        case .sttPaste: return NSLocalizedString("Paste", comment: "Shortcut action")
+        case .sttPaste: return NSLocalizedString("Copy", comment: "Shortcut action")
         case .sttSave: return NSLocalizedString("Save Text", comment: "Shortcut action")
         case .sttTargetSelect: return NSLocalizedString("Select Target", comment: "Shortcut action")
         case .sttCancel: return NSLocalizedString("Cancel", comment: "Shortcut action")
@@ -300,7 +303,7 @@ final class ShortcutSettingsManager: ObservableObject {
     }
 
     func conflicts(for action: ShortcutAction) -> [ShortcutAction] {
-        ShortcutAction.allCases.filter { other in
+        ShortcutAction.availableActions.filter { other in
             other != action && (other.category == action.category || other.category == "Common" || action.category == "Common")
                 && shortcut(for: other) == shortcut(for: action)
         }

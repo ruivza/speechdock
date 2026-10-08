@@ -349,7 +349,6 @@ final class GrokRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
-                    self.apiKeyManager.noteHandshake(of: task, provider: .grok)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
                         dprint("GrokRealtimeSTT: WebSocket receive error: \(error)")

@@ -7,17 +7,29 @@ options:
   developmentLanguage: en
   knownRegions: [en, ja, de, fr, ko, zh-Hans]
 
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+
+settingGroups:
+  signing:
+    configs:
+      Debug:
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+      Release:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Developer ID Application
+
 packages:
   HotKey:
     url: https://github.com/soffes/HotKey
     from: 0.2.1
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    # 2.9.3+: includes high-severity security fixes (delta-update symlink attack,
-    # appcast connection validation) shipped in 2.9.2, plus the 2.9.3 fix for
-    # initial-install failure on apps whose bundle ID ends in `.app` — directly
-    # affects com.speechdock.app.
-    from: 2.9.3
+    # Includes the symlink/installer security fixes through 2.9.6.
+    # Keep the release signing tools at the same version.
+    exactVersion: 2.9.6
 
 targets:
   SpeechDock:
@@ -33,6 +45,8 @@ targets:
         buildPhase: resources
       - path: Resources/SpeechDock.sdef
         buildPhase: resources
+      - path: Resources/container-migration.plist
+        buildPhase: resources
       - path: Resources/en.lproj
         buildPhase: resources
       - path: Resources/ja.lproj
@@ -46,6 +60,7 @@ targets:
       - path: Resources/fr.lproj
         buildPhase: resources
     settings:
+      groups: [signing]
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speechdock.app
         PRODUCT_NAME: SpeechDock
@@ -58,9 +73,7 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_HARDENED_RUNTIME: YES
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "Developer ID Application: Yoichiro Hasebe (25ME8D76FY)"
-        DEVELOPMENT_TEAM: 25ME8D76FY
+        ENABLE_APP_SANDBOX: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Debug:
@@ -71,6 +84,66 @@ targets:
     dependencies:
       - package: HotKey
       - package: Sparkle
+      - target: SpeechDockVoiceInput
+        embed: true
+        link: false
+        codeSign: false # Preserve the helper's own sandbox entitlements and signature.
+        copy:
+          destination: resources
+          subpath: InputMethods
+
+  SpeechDockVoiceInput:
+    type: application
+    platform: macOS
+    sources:
+      - path: InputMethod
+        excludes: [Info.plist, VoiceInput.entitlements]
+      - path: Resources/Assets.xcassets/MenuBarIcon.imageset/menubar.png
+        buildPhase: resources
+      - path: Services/InputMethod/VoiceInputSession.swift
+      - path: Services/RealtimeSTT/RealtimeSTTProtocol.swift
+      - path: Services/RealtimeSTT/OnDeviceSTTFactory.swift
+      - path: Services/RealtimeSTT/MacOSRealtimeSTT.swift
+      - path: Services/RealtimeSTT/SpeechAnalyzerSTT.swift
+      - path: Services/AudioInputManager.swift
+      - path: Services/AudioLevelMonitor.swift
+      - path: Services/DebugLogger.swift
+      - path: Models/LanguageCode.swift
+      - path: Models/STTProvider.swift
+      - path: Services/InterfaceLanguage.swift
+      - path: Resources/en.lproj
+        buildPhase: resources
+      - path: Resources/ja.lproj
+        buildPhase: resources
+      - path: Resources/zh-Hans.lproj
+        buildPhase: resources
+      - path: Resources/ko.lproj
+        buildPhase: resources
+      - path: Resources/de.lproj
+        buildPhase: resources
+      - path: Resources/fr.lproj
+        buildPhase: resources
+    settings:
+      groups: [signing]
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.speechdock.inputmethod.voice
+        PRODUCT_NAME: SpeechDockVoiceInput
+        VOICE_INPUT_DISPLAY_NAME: SpeechDock Voice Input
+        MARKETING_VERSION: "0.1.39"
+        CURRENT_PROJECT_VERSION: "0.1.39"
+        INFOPLIST_FILE: InputMethod/Info.plist
+        CODE_SIGN_ENTITLEMENTS: InputMethod/VoiceInput.entitlements
+        SWIFT_VERSION: "5.9"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.speechdock.inputmethod.voice.dev
+          VOICE_INPUT_DISPLAY_NAME: SpeechDock Voice Input Dev
+    dependencies:
+      - sdk: InputMethodKit.framework
 
   SpeechDockTests:
     type: bundle.unit-test
@@ -78,18 +151,24 @@ targets:
     sources:
       - path: Tests
     settings:
+      groups: [signing]
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speechdock.app.tests
         SWIFT_VERSION: "5.9"
         INFOPLIST_FILE: ""
         GENERATE_INFOPLIST_FILE: YES
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "Developer ID Application: Yoichiro Hasebe (25ME8D76FY)"
-        DEVELOPMENT_TEAM: 25ME8D76FY
     dependencies:
       - target: SpeechDock
 
 schemes:
+  SpeechDockVoiceInput:
+    build:
+      targets:
+        SpeechDockVoiceInput: all
+    run:
+      config: Debug
+    archive:
+      config: Release
   SpeechDock:
     build:
       targets:
@@ -99,6 +178,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      environmentVariables:
+        SPEECHDOCK_TEST_NO_API_KEYS: "1"
       targets:
         - SpeechDockTests
     profile:

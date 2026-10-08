@@ -7,7 +7,7 @@ final class ShortcutHUDManager {
 
     private var panel: NSPanel?
     private var escapeMonitor: Any?
-    private var globalEscapeMonitor: Any?
+    private var escapeHotKey: RegisteredHotKey?
     private var clickOutsideMonitor: Any?
 
     /// Window level: above panels, below subtitle overlay (screenSaver - 1)
@@ -101,12 +101,12 @@ final class ShortcutHUDManager {
             return event
         }
 
-        // Global ESC key monitor (when app is not focused)
-        globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 { // ESC
-                Task { @MainActor in
-                    self?.dismiss()
-                }
+        // Global key monitoring requires Accessibility. Register only Escape
+        // while the HUD is visible, using the same sandbox-compatible hotkey API.
+        escapeHotKey = RegisteredHotKey(keyCode: 53, modifiers: 0)
+        escapeHotKey?.keyDownHandler = { [weak self] in
+            Task { @MainActor in
+                self?.dismiss()
             }
         }
 
@@ -136,10 +136,7 @@ final class ShortcutHUDManager {
             NSEvent.removeMonitor(monitor)
             escapeMonitor = nil
         }
-        if let monitor = globalEscapeMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalEscapeMonitor = nil
-        }
+        escapeHotKey = nil
         if let monitor = clickOutsideMonitor {
             NSEvent.removeMonitor(monitor)
             clickOutsideMonitor = nil

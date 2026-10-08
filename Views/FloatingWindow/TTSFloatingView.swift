@@ -552,7 +552,7 @@ struct TTSFloatingView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Type text here, or:")
                         .foregroundColor(.secondary)
-                    Text("• Select text elsewhere and press \(ttsShortcut)")
+                    Text("• Copy text elsewhere, then press \(ttsShortcut)")
                         .foregroundColor(.secondary.opacity(0.8))
                     Text("• Use OCR (\(ocrShortcut)) to capture screen text")
                         .foregroundColor(.secondary.opacity(0.8))
@@ -925,7 +925,7 @@ struct TTSFloatingView: View {
                 .buttonStyle(.plain)
                 .disabled(appState.translationState.isTranslated)
                 .opacity(appState.translationState.isTranslated ? 0.5 : 1.0)
-                .help(appState.translationState.isTranslated ? "Press Original to edit" : "Clear Text")
+                .help(appState.translationState.isTranslated ? NSLocalizedString("Press Original to edit", comment: "Translated text help") : NSLocalizedString("Clear Text", comment: "Clear text help"))
             }
             .padding(6)
             .background(Color(.windowBackgroundColor))
@@ -1459,6 +1459,6 @@ struct TTSSpeedSelector: View {
             }
         }
         .fixedSize()
-        .help(isPlaying ? "Click to adjust playback speed" : "Click to set playback speed")
+        .help(isPlaying ? NSLocalizedString("Click to adjust playback speed", comment: "Playback speed help") : NSLocalizedString("Click to set playback speed", comment: "Playback speed help"))
     }
 }

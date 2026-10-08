@@ -13,6 +13,8 @@ final class SparkleUpdater: ObservableObject {
     @Published var canCheckForUpdates = false
 
     private init() {
+        // Ignore an old per-user feed override when switching to this fork.
+        UserDefaults.standard.removeObject(forKey: "SUFeedURL")
         // Create the updater controller with default configuration
         // startingUpdater: true means it will automatically check for updates based on user preferences
         updaterController = SPUStandardUpdaterController(

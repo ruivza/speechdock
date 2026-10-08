@@ -35,7 +35,7 @@ enum LanguageCode: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .auto: return "Auto"
+        case .auto: return NSLocalizedString("Auto", comment: "Automatic language")
         case .english: return "English"
         case .japanese: return "日本語"
         case .chinese: return "中文"

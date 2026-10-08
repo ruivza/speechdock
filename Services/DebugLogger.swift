@@ -1,6 +1,12 @@
 import Foundation
 import os.log
 
+/// Network errors may carry credential-bearing URLs in userInfo.
+func networkErrorSummary(_ error: Error) -> String {
+    let error = error as NSError
+    return "\(error.domain) (\(error.code))"
+}
+
 #if DEBUG
 private let speechDockDebugLog = OSLog(subsystem: "com.speechdock.app.dev", category: "debug")
 #endif

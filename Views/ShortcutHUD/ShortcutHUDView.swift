@@ -72,7 +72,7 @@ struct ShortcutHUDView: View {
     }
 
     private var sttPanelShortcuts: [ShortcutItem] {
-        ShortcutAction.allCases
+        ShortcutAction.availableActions
             .filter { $0.category == "STT Panel" }
             .map { action in
                 ShortcutItem(
@@ -83,7 +83,7 @@ struct ShortcutHUDView: View {
     }
 
     private var ttsPanelShortcuts: [ShortcutItem] {
-        ShortcutAction.allCases
+        ShortcutAction.availableActions
             .filter { $0.category == "TTS Panel" }
             .map { action in
                 ShortcutItem(
@@ -94,7 +94,7 @@ struct ShortcutHUDView: View {
     }
 
     private var commonShortcuts: [ShortcutItem] {
-        ShortcutAction.allCases
+        ShortcutAction.availableActions
             .filter { $0.category == "Common" }
             .map { action in
                 ShortcutItem(

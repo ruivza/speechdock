@@ -3,7 +3,19 @@
 <plist version="1.0">
 <dict>
     <key>com.apple.security.app-sandbox</key>
-    <false/>
+    <true/>
+    <key>com.apple.security.device.microphone</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- Sparkle's documented sandbox installer connection names, scoped to this app. -->
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+        <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+        <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
+    </array>
     <!-- Required for microphone access when signed with the Hardened
          Runtime (project.yml: ENABLE_HARDENED_RUNTIME = YES). This is a
          Hardened Runtime resource-access entitlement, not sandbox-only —

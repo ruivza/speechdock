@@ -16,6 +16,9 @@ struct SubtitleSettingsView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                Text("Cloud subtitle translation sends the current cumulative transcript and up to two previous original/translation pairs to the selected provider.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             } header: {
                 Text("Subtitle Mode")
             }

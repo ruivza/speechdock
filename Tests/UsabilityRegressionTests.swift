@@ -21,12 +21,6 @@ final class UsabilityRegressionTests: XCTestCase {
         XCTAssertEqual(WindowPlacement.fit(oversized, visibleFrames: [primary]), primary)
     }
 
-    func testPasteVerificationUsesUTF16SelectionAndRejectsInvalidRange() {
-        XCTAssertEqual(PasteVerification.expectedText(original: "😀old", selection: NSRange(location: 2, length: 3), inserted: "new"), "😀new")
-        XCTAssertNil(PasteVerification.expectedText(original: "old", selection: NSRange(location: 2, length: 99), inserted: "new"))
-        XCTAssertNil(PasteVerification.expectedText(original: "old", selection: NSRange(location: NSNotFound, length: 0), inserted: "new"))
-    }
-
     func testAudioFileFormatsAreSharedByChooserAndDropValidation() {
         for ext in AudioFileSupport.extensions {
             let url = URL(fileURLWithPath: "/example." + ext.uppercased())

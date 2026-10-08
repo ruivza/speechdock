@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key><true/>
+    <!-- App Sandbox and Hardened Runtime use distinct microphone keys. -->
+    <key>com.apple.security.device.microphone</key><true/>
+    <key>com.apple.security.device.audio-input</key><true/>
+    <!-- SpeechAnalyzer may ask Apple to download a missing on-device language model. -->
+    <key>com.apple.security.network.client</key><true/>
+    <!-- InputMethodKit registers only this component's exact connection name. -->
+    <key>com.apple.security.temporary-exception.mach-register.global-name</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)_Connection</string>
+</dict>
+</plist>

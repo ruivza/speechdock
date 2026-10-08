@@ -530,20 +530,108 @@
 /* Translation row */
 "Translation:" = "翻译:";
 
-/* API keys: 1Password references */
-"1Password CLI (op) was not found" = "未找到 1Password CLI（op）";
-"1Password CLI is not signed in" = "1Password CLI 未登录";
-"1Password access was not approved" = "未批准访问 1Password";
-"1Password item was not found" = "未找到 1Password 项目";
-"1Password did not respond in time" = "1Password 未及时响应";
-"1Password reference could not be read" = "无法读取 1Password 引用";
 "%@ API key: %@" = "%1$@ API 密钥：%2$@";
 "%@ API key not found" = "未找到 %@ API 密钥";
-"Each field takes the key itself or a 1Password reference (op://vault/item/field). A reference is read with the 1Password CLI (op) when Settings opens or a key is first needed; only the reference is stored in the keychain." = "每个字段可以填写密钥本身，或 1Password 引用（op://保险库/项目/字段）。引用会在打开设置或首次需要密钥时，通过 1Password CLI（op）读取；钥匙串中只保存引用。";
-"Reload from 1Password" = "从 1Password 重新读取";
 "From Environment (%@, older name)" = "来自环境变量（%@，旧名称）";
 "From Environment (%@)" = "来自环境变量（%@）";
-"1Password: read" = "1Password：已读取";
-"1Password: read when first used" = "1Password：首次使用时读取";
-"Use the form op://vault/item/field" = "请使用 op://保险库/项目/字段 的格式";
-"1Password CLI (op) could not be verified" = "无法验证 1Password CLI（op）的签名";
+
+/* API key storage */
+"Enter your API keys below to store them securely in macOS Keychain. Environment variables are also supported." = "在下方填写 API 密钥，将其安全地保存在 macOS 钥匙串中。也支持使用环境变量。";
+"Enter the API key itself, not a URL." = "请填写 API 密钥本身，而非 URL。";
+
+/* History and speech privacy */
+"Save Transcription History" = "保存转写历史";
+"History is saved locally without encryption. Clear History removes saved entries." = "历史记录保存在本地，未加密。清空历史会删除已保存的记录。";
+"On-device speech recognition is unavailable for this language." = "此语言无法使用本地语音识别。";
+"Cloud subtitle translation sends the current cumulative transcript and up to two previous original/translation pairs to the selected provider." = "云端字幕翻译会将当前累计转写文本，以及最多两组此前的原文和译文发送给所选服务商。";
+
+/* Sandboxed voice input */
+"Set Up Voice Input Method…" = "设置语音输入法…";
+
+/* Sandboxed main app */
+"Read Copied Text" = "朗读已复制文本";
+"Close panel after copy" = "复制后关闭面板";
+
+"Text copied. Paste manually, or use SpeechDock Voice Input for direct dictation." = "文本已复制。请手动粘贴，或使用 SpeechDock Voice Input 直接语音输入。";
+
+"When enabled, the STT panel closes automatically after copying text." = "启用后，复制文本后 STT 面板将自动关闭。";
+
+"For OCR and system/app audio capture" = "用于 OCR 和系统或应用音频录制";
+
+/* Interface, permission rechecks and voice input */
+"SpeechDock Permissions" = "SpeechDock 权限";
+"Grant access to %@ in System Settings. The main app and Voice Input have separate permissions. After rebuilding or changing signing, remove the old entry and allow the current app again if necessary." = "请在系统设置中授权 %@。主程序和语音输入法需要分别授权。重新构建或更换签名后，如有必要，请删除旧条目并重新授权当前应用。";
+"Check Again" = "重新检查";
+"Show This App in Finder" = "在 Finder 中显示当前应用";
+"If permissions are enabled but unavailable in this session, quit SpeechDock completely and reopen it." = "如果权限已开启但当前会话仍不可用，请完全退出 SpeechDock 后重新打开。";
+"Recommended" = "建议开启";
+"Optional" = "可选";
+"Open Settings" = "打开设置";
+"Translation provider, model, and target language used by both the panel Translate button and subtitle real-time translation." = "面板翻译按钮和实时字幕翻译共用这里的服务商、模型和目标语言。";
+"Interface Language" = "界面语言";
+"Quit and reopen SpeechDock to apply the interface language. Speech and translation languages are configured separately." = "完全退出并重新打开 SpeechDock 后生效。语音和翻译语言需要分别设置。";
+"Cache" = "缓存";
+"Cache Cleared" = "缓存已清理";
+"Clear Cache" = "清理缓存";
+"Clears voice lists and network cache. Temporary audio is cleaned automatically. History, API keys, saved audio and Apple language models are kept." = "清理音色列表和网络缓存。临时音频会自动清理。历史记录、API 密钥、已保存音频和 Apple 语言模型会保留。";
+"Quit and reopen SpeechDock to apply the interface language." = "完全退出并重新打开 SpeechDock 后，界面语言设置生效。";
+"SpeechDock works without API keys using macOS built-in STT/TTS. Cloud providers below are optional and offer additional voices, models, and languages." = "SpeechDock 可直接使用 macOS 内置语音识别和朗读，无需 API 密钥。以下云服务为可选项，可提供更多音色、模型和语言。";
+"About API Keys" = "关于 API 密钥";
+"Unsupported file format: .%@\n\nSupported formats: %@" = "不支持的文件格式：.%@\n\n支持的格式：%@";
+"Save Failed" = "保存失败";
+"Screen Recording permission required" = "需要屏幕录制权限";
+"Shows HUD while recording" = "录音时显示状态浮窗";
+"Copies text when done" = "完成后复制文字";
+"Hide Button" = "隐藏按钮";
+"Transcription failed" = "转录失败";
+"Screen capture is unavailable in this session. Check permissions for this app, then restart it if needed." = "当前会话无法使用屏幕捕获。请检查当前应用的权限，如有必要，请完全退出后重新打开。";
+"Could Not Save Audio" = "无法保存音频";
+"SpeechDock Help" = "SpeechDock 帮助";
+"Unavailable in this session" = "当前会话不可用";
+"On-device, ~18 languages" = "本机处理，约 18 种语言";
+"100+ languages, high quality" = "100 多种语言，高质量";
+"Top" = "顶部";
+"Bottom" = "底部";
+"The voice input component is missing or invalid. Rebuild or reinstall SpeechDock." = "语音输入组件缺失或无效，请重新构建或安装 SpeechDock。";
+"The Input Methods directory must be owned by this user, not a symbolic link, and not writable by other users." = "Input Methods 目录必须由当前用户拥有，不能是符号链接，也不能允许其他用户写入。";
+"SpeechDock Voice Input is already installed. To update it, switch to another input source, remove the old component from ~/Library/Input Methods in Finder, then install again and log out." = "SpeechDock 语音输入法已安装。更新时，请先切换到其他输入法，在 Finder 中从 ~/Library/Input Methods 删除旧组件，再重新安装并注销登录。";
+"Choose your ~/Library/Input Methods folder to install SpeechDock Voice Input, then add it under System Settings → Keyboard → Text Input → Edit → + → English. Recognition runs locally without Accessibility permission. Select it and press ⌃⌥R to start/finish; Esc cancels." = "选择 ~/Library/Input Methods 文件夹安装 SpeechDock 语音输入法，然后在系统设置 → 键盘 → 文字输入 → 编辑 → + → 英语中添加。识别在本机运行，无需辅助功能权限。选中后按 ⌃⌥R 开始或完成，Esc 取消。";
+"Install" = "安装";
+"Choose your Input Methods folder" = "选择 Input Methods 文件夹";
+"Choose ~/Library/Input Methods. Create the folder here if needed." = "请选择 ~/Library/Input Methods，如有必要可在此创建文件夹。";
+"Install Here" = "安装到此处";
+"SpeechDock Voice Input installed" = "SpeechDock 语音输入法已安装";
+"Add it in Keyboard → Text Input → Edit → + → English. If it is not listed, log out and back in. Choose Voice Input Settings… in the input menu to set the speech language." = "在键盘 → 文字输入 → 编辑 → + → 英语中添加。如果列表中未显示，请注销后重新登录。在输入菜单中选择“语音输入设置…”来设置识别语言。";
+"Open Keyboard Settings" = "打开键盘设置";
+"Done" = "完成";
+"Voice input installation failed" = "语音输入法安装失败";
+"Preparing speech recognition…" = "正在准备语音识别…";
+"Allow microphone access in System Settings, then try again." = "请在系统设置中允许麦克风访问后重试。";
+"Listening — ⌃⌥R to insert, Esc to cancel" = "正在聆听 — ⌃⌥R 输入，Esc 取消";
+"Recording cancelled after five minutes." = "录音已在五分钟后自动取消。";
+"Finishing speech recognition…" = "正在完成语音识别…";
+"Input destination changed. Recording cancelled." = "输入目标已变更，录音已取消。";
+"No speech recognized." = "未识别到语音。";
+"Recording exceeded the text limit and was cancelled." = "录音文字超过长度限制，已取消。";
+"Apple Speech (offline, max 100MB)" = "Apple 语音识别（离线，最大 100MB）";
+"SpeechDock Voice Input" = "SpeechDock 语音输入法";
+"SpeechDock Voice Input Settings" = "SpeechDock 语音输入设置";
+"Select SpeechDock Voice Input in the macOS input menu. Press ⌃⌥R to start, then press it again to insert the result. Esc cancels. Changing the input destination cancels the recording.\n\nRecognition runs on-device. Unsupported languages fail without cloud fallback. Apple may download language models. Recordings and transcripts are not saved." = "在 macOS 输入菜单中选择 SpeechDock 语音输入法。按 ⌃⌥R 开始，再次按下以输入结果。Esc 取消。输入目标变更时会取消录音。\n\n识别在本机运行，不支持的语言不会回退到云端。Apple 可能下载语言模型。录音和转录文字不会保存。";
+"Speech language:" = "识别语言：";
+"Start / Finish Voice Input (⌃⌥R)" = "开始 / 完成语音输入（⌃⌥R）";
+"Cancel Voice Input" = "取消语音输入";
+"Voice Input Settings…" = "语音输入设置…";
+"Log out and back in to apply the input method interface language." = "注销并重新登录后，输入法界面语言设置生效。";
+"SpeechDock" = "SpeechDock";
+"GitHub" = "GitHub";
+"GitHub Sponsors" = "GitHub Sponsors";
+"Buy Me a Coffee" = "Buy Me a Coffee";
+"Ko-fi" = "Ko-fi";
+"© 2026 Yoichiro Hasebe" = "© 2026 Yoichiro Hasebe";
+"A" = "A";
+"1s" = "1s";
+"5s" = "5s";
+"10s" = "10s";
+"60s" = "60s";
+"0.5x" = "0.5x";
+"2.0x" = "2.0x";

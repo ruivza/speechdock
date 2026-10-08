@@ -107,7 +107,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
             await flushPreBuffer()
         } catch {
             // Clean up on error
-            dprint("GeminiRealtimeSTT: startListening failed: \(error)")
+            dprint("GeminiRealtimeSTT: startListening failed: \(networkErrorSummary(error))")
 
             stopListening()
             throw error
@@ -309,10 +309,9 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
                         self.handleWebSocketMessage(message)
                     }
                 } catch {
-                    self.apiKeyManager.noteHandshake(of: task, provider: .gemini)
                     await MainActor.run {
                         guard self.acceptsMessages(from: task) else { return }
-                        dprint("GeminiRealtimeSTT: WebSocket receive error: \(error)")
+                        dprint("GeminiRealtimeSTT: WebSocket receive error: \(networkErrorSummary(error))")
 
                         if self.isListening && !self.isIntentionallyStopping {
                             let generation = self.connectionGeneration
@@ -381,7 +380,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
 
         } catch {
             guard generation == connectionGeneration, !Task.isCancelled else { return }
-            dprint("GeminiRealtimeSTT: Reconnect failed: \(error)")
+            dprint("GeminiRealtimeSTT: Reconnect failed: \(networkErrorSummary(error))")
 
             await handleUnexpectedDisconnection()
         }
@@ -690,7 +689,7 @@ final class GeminiRealtimeSTT: NSObject, RealtimeSTTService {
 
         webSocketTask.send(.string(jsonString)) { error in
             if let error = error {
-                dprint("GeminiRealtimeSTT: Send error: \(error)")
+                dprint("GeminiRealtimeSTT: Send error: \(networkErrorSummary(error))")
 
             }
         }
@@ -819,7 +818,7 @@ extension GeminiRealtimeSTT: URLSessionWebSocketDelegate {
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
-            dprint("GeminiRealtimeSTT: URLSession task completed with error: \(error)")
+            dprint("GeminiRealtimeSTT: URLSession task completed with error: \(networkErrorSummary(error))")
 
         }
     }

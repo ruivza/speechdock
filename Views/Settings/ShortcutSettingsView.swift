@@ -63,7 +63,7 @@ struct ShortcutSettingsView: View {
                 }
 
                 Section {
-                    ForEach(ShortcutAction.allCases.filter { $0.category == "STT Panel" }, id: \.self) { action in
+                    ForEach(ShortcutAction.availableActions.filter { $0.category == "STT Panel" }, id: \.self) { action in
                         PanelShortcutRow(action: action, manager: shortcutManager)
                     }
                 } header: {
@@ -75,7 +75,7 @@ struct ShortcutSettingsView: View {
                 }
 
                 Section {
-                    ForEach(ShortcutAction.allCases.filter { $0.category == "TTS Panel" }, id: \.self) { action in
+                    ForEach(ShortcutAction.availableActions.filter { $0.category == "TTS Panel" }, id: \.self) { action in
                         PanelShortcutRow(action: action, manager: shortcutManager)
                     }
                 } header: {
@@ -87,7 +87,7 @@ struct ShortcutSettingsView: View {
                 }
 
                 Section {
-                    ForEach(ShortcutAction.allCases.filter { $0.category == "Common" }, id: \.self) { action in
+                    ForEach(ShortcutAction.availableActions.filter { $0.category == "Common" }, id: \.self) { action in
                         PanelShortcutRow(action: action, manager: shortcutManager)
                     }
                 } header: {

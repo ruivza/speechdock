@@ -46,7 +46,7 @@ final class PermissionSetupController: NSObject, NSWindowDelegate {
         window.identifier = NSUserInterfaceItemIdentifier("permissionSetup")
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 540, height: 530))
+        window.setContentSize(NSSize(width: 540, height: 610))
         window.center()
         window.delegate = self
 

@@ -1,6 +1,6 @@
 import AVFoundation
 
-/// Screen capture and Accessibility expose only a granted/not-granted check.
+/// Screen capture exposes only a granted/not-granted check.
 /// Microphone access additionally distinguishes a first request from a denial.
 enum PermissionAccessStatus: Equatable {
     case granted, notRequested, denied, restricted, notGranted
@@ -11,7 +11,7 @@ enum PermissionAccessStatus: Equatable {
         case .notRequested: return NSLocalizedString("Not requested", comment: "Permission status")
         case .denied: return NSLocalizedString("Denied", comment: "Permission status")
         case .restricted: return NSLocalizedString("Restricted", comment: "Permission status")
-        case .notGranted: return NSLocalizedString("Not granted", comment: "Permission status")
+        case .notGranted: return NSLocalizedString("Unavailable in this session", comment: "Permission status")
         }
     }
 
@@ -28,7 +28,6 @@ enum PermissionAccessStatus: Equatable {
 
 struct PermissionSnapshot {
     var microphone: PermissionAccessStatus
-    var accessibility: Bool
     var screenRecording: Bool
 
     func missingPermission(for feature: PermissionFeature) -> String? {
@@ -40,12 +39,10 @@ struct PermissionSnapshot {
             return screenRecording ? nil : NSLocalizedString("Screen Recording access is needed to capture system or app audio.", comment: "Audio capture permission guidance")
         case .ocr:
             return screenRecording ? nil : NSLocalizedString("Screen Recording access is needed to capture text with OCR.", comment: "OCR permission guidance")
-        case .textInsertion:
-            return accessibility ? nil : NSLocalizedString("Accessibility access is needed to insert text into another app. You can still copy and paste manually.", comment: "Text insertion permission guidance")
         }
     }
 }
 
 enum PermissionFeature {
-    case speechPlayback, microphoneRecording, systemAudioRecording, ocr, textInsertion
+    case speechPlayback, microphoneRecording, systemAudioRecording, ocr
 }

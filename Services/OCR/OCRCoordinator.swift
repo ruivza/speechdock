@@ -31,6 +31,8 @@ final class OCRCoordinator: ObservableObject {
     // MARK: - Private Properties
 
     private var overlayWindow: RegionSelectionOverlay?
+    private var permissionCheckTask: Task<Void, Never>?
+    private var selectionRequestID = UUID()
 
     /// OCR language preferences
     var recognitionLanguages: [String] = ["ja", "en"]
@@ -42,21 +44,26 @@ final class OCRCoordinator: ObservableObject {
 
     /// Start the region selection process
     func startSelection() {
-        guard !isSelecting && !isProcessing else {
+        guard !isSelecting && !isProcessing && permissionCheckTask == nil else {
             dprint("OCRCoordinator: Already selecting or processing")
 
             return
         }
 
-        // Check screen recording permission
-        guard ScreenCaptureService.hasScreenRecordingPermission else {
-            dprint("OCRCoordinator: Screen recording permission not granted")
-
-            ScreenCaptureService.requestScreenRecordingPermission()
-            onError?(OCRError.permissionDenied)
-            return
+        let request = UUID()
+        selectionRequestID = request
+        permissionCheckTask = Task { [weak self] in
+            guard let self else { return }
+            let granted = await PermissionService.shared.ensureScreenRecordingAccess(for: .ocr)
+            guard self.selectionRequestID == request else { return }
+            self.permissionCheckTask = nil
+            guard !Task.isCancelled else { return }
+            guard granted else { self.onError?(OCRError.permissionDenied); return }
+            self.beginSelection()
         }
+    }
 
+    private func beginSelection() {
         isSelecting = true
         lastError = nil
 
@@ -75,6 +82,9 @@ final class OCRCoordinator: ObservableObject {
 
     /// Cancel the current selection or processing
     func cancel() {
+        selectionRequestID = UUID()
+        permissionCheckTask?.cancel()
+        permissionCheckTask = nil
         if isSelecting {
             overlayWindow?.endSelection()
             overlayWindow = nil

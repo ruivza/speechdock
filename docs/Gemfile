@@ -2,6 +2,8 @@ source "https://rubygems.org"
 
 gem "github-pages", group: :jekyll_plugins
 gem "jekyll-remote-theme"
+gem "nokogiri", ">= 1.19.4", "< 2" # Includes canonicalization and later security fixes
+gem "rake"    # Required by the remote theme
 gem "webrick" # Ruby 3.0+
 gem "csv"     # Ruby 3.4+
 gem "base64"  # Ruby 3.4+

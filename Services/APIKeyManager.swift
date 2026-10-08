@@ -1,5 +1,4 @@
 import Foundation
-import Observation
 
 /// Keychain access used by APIKeyManager. Replaced in tests.
 protocol APIKeyStore {
@@ -9,24 +8,6 @@ protocol APIKeyStore {
 }
 
 extension KeychainService: APIKeyStore {}
-
-/// Bumped when 1Password reference results change, so views that check key
-/// availability are drawn again.
-@MainActor @Observable
-final class APIKeyChangeSignal {
-    static let shared = APIKeyChangeSignal()
-    var revision = 0
-}
-
-/// Whether a provider's key can be used.
-enum APIKeyStatus: Equatable {
-    case notSet
-    case ready
-    /// A 1Password reference that has not been read yet. Counts as available:
-    /// using it waits for the read.
-    case pending
-    case failed(SecretReferenceFailure)
-}
 
 final class APIKeyManager {
     static let shared = APIKeyManager()
@@ -50,31 +31,25 @@ final class APIKeyManager {
     private let keychain: APIKeyStore
     private let environment: () -> [String: String]
     private let testModeNoAPIKeys: Bool
-    let referenceResolver: SecretReferenceResolver
 
     init(keychain: APIKeyStore = KeychainService(),
          environment: @escaping () -> [String: String] = { ProcessInfo.processInfo.environment },
-         testModeNoAPIKeys: Bool = ProcessInfo.processInfo.environment["SPEECHDOCK_TEST_NO_API_KEYS"] == "1",
-         referenceResolver: SecretReferenceResolver? = nil) {
+         testModeNoAPIKeys: Bool = ProcessInfo.processInfo.environment["SPEECHDOCK_TEST_NO_API_KEYS"] == "1") {
         self.keychain = keychain
         self.environment = environment
         self.testModeNoAPIKeys = testModeNoAPIKeys
-        self.referenceResolver = referenceResolver ?? SecretReferenceResolver(onChange: {
-            Task { @MainActor in APIKeyChangeSignal.shared.revision += 1 }
-        })
     }
 
     // MARK: - Lookup
 
-    /// Where a key was found, without reading any 1Password reference.
+    /// Where a configured key was found.
     struct KeyOrigin: Equatable {
         let source: APIKeySource
         /// The name it was found under (may be an older name).
         let name: String
-        /// The stored text: the key itself, or a 1Password reference.
+        /// The stored text, including invalid values that Settings can replace.
         let storedValue: String
 
-        var isReference: Bool { SecretReference.isReference(storedValue) }
         var isLegacyName: Bool { APIKeyManager.canonicalName(name) != name }
     }
 
@@ -101,15 +76,12 @@ final class APIKeyManager {
         keyOrigin(for: provider.envKeyName)
     }
 
-    // MARK: - Synchronous reads (never wait, never start op)
+    // MARK: - Reads
 
-    /// The key for immediate use, or nil. A 1Password reference gives its
-    /// value only once it has been read; the reference text is never returned.
+    /// Only literal API keys can be sent to providers. Stored URLs remain
+    /// visible in Settings but are never returned as credentials.
     func getAPIKey(for name: String) -> String? {
-        guard let origin = keyOrigin(for: name) else { return nil }
-        if origin.isReference {
-            return referenceResolver.cachedValue(for: origin.storedValue)
-        }
+        guard let origin = keyOrigin(for: name), Self.isUsableKey(origin.storedValue) else { return nil }
         return origin.storedValue
     }
 
@@ -117,27 +89,9 @@ final class APIKeyManager {
         getAPIKey(for: provider.envKeyName)
     }
 
-    func keyStatus(for name: String) -> APIKeyStatus {
-        trackChanges()
-        guard let origin = keyOrigin(for: name) else { return .notSet }
-        guard origin.isReference else { return .ready }
-        switch referenceResolver.state(for: origin.storedValue) {
-        case .resolved?: return .ready
-        case .failed(let failure)?: return .failed(failure)
-        case nil: return .pending
-        }
-    }
-
-    func keyStatus(for provider: STTProvider) -> APIKeyStatus {
-        keyStatus(for: provider.envKeyName)
-    }
-
-    /// For enabling choices in the UI: a key is set and has not failed.
+    /// For enabling choices in the UI: a usable key is set.
     func hasAPIKey(for name: String) -> Bool {
-        switch keyStatus(for: name) {
-        case .ready, .pending: return true
-        case .notSet, .failed: return false
-        }
+        getAPIKey(for: name) != nil
     }
 
     func hasAPIKey(for provider: STTProvider) -> Bool {
@@ -149,7 +103,7 @@ final class APIKeyManager {
     }
 
     /// The keychain's stored text for the canonical name or an older one
-    /// (the key or a reference), for the Settings field.
+    /// for the Settings field.
     func storedKeychainValue(for provider: STTProvider) -> String? {
         guard !testModeNoAPIKeys else { return nil }
         for candidate in Self.candidateNames(provider.envKeyName) {
@@ -158,32 +112,21 @@ final class APIKeyManager {
         return nil
     }
 
-    // MARK: - Reads for use (may wait for 1Password)
-
-    /// The key to send to the provider. A 1Password reference is read first
-    /// (every reference the app knows, with one `op inject`), which can wait
-    /// for an approval prompt. Nil when unset or unreadable;
-    /// `unavailableReason(for:)` tells why.
+    /// Async entry point retained for provider clients.
     func apiKey(for name: String) async -> String? {
-        guard let origin = keyOrigin(for: name) else { return nil }
-        guard origin.isReference else { return origin.storedValue }
-        switch await referenceResolver.value(for: origin.storedValue, batch: allReferences()) {
-        case .success(let value): return value
-        case .failure: return nil
-        }
+        getAPIKey(for: name)
     }
 
     func apiKey(for provider: STTProvider) async -> String? {
         await apiKey(for: provider.envKeyName)
     }
 
-    /// A message for a key that could not be used. Names the provider and,
-    /// for a reference, the reason code only, never the reference text.
+    /// Reports unavailable credentials without including their stored text.
     func unavailableReason(for name: String) -> String {
         let providerName = Self.providerDisplayName(for: name)
-        if case .failed(let failure) = keyStatus(for: name) {
+        if let origin = keyOrigin(for: name), !Self.isUsableKey(origin.storedValue) {
             return String(format: NSLocalizedString("%@ API key: %@", comment: "API key unavailable: provider, reason"),
-                          providerName, failure.localizedDescription)
+                          providerName, NSLocalizedString("Enter the API key itself, not a URL.", comment: "Invalid API key format"))
         }
         return String(format: NSLocalizedString("%@ API key not found", comment: "API key unavailable: provider"),
                       providerName)
@@ -193,75 +136,13 @@ final class APIKeyManager {
         unavailableReason(for: provider.envKeyName)
     }
 
-    /// Reads every reference not read yet (Settings opened).
-    func prepareReferences() async {
-        let references = allReferences()
-        guard !references.isEmpty else { return }
-        await referenceResolver.prepare(references)
-    }
-
-    /// Reads the provider's reference again, including after a cancelled approval.
-    func reloadReference(for provider: STTProvider) async {
-        guard let origin = keyOrigin(for: provider), origin.isReference else { return }
-        referenceResolver.forget(origin.storedValue)
-        _ = await referenceResolver.value(for: origin.storedValue, batch: allReferences(), force: true)
-    }
-
-    /// Reads one reference with `op read`, for checking it before it is saved.
-    func readReference(_ reference: String) async -> Result<String, SecretReferenceFailure> {
-        await referenceResolver.readSingle(reference)
-    }
-
-    /// The provider rejected the key (HTTP 401/403). A key read from a
-    /// 1Password reference is read again on the next use, once.
-    func providerRejectedKey(for name: String) {
-        guard let origin = keyOrigin(for: name), origin.isReference else { return }
-        if referenceResolver.providerRejected(origin.storedValue) {
-            dprint("APIKeyManager: \(Self.canonicalName(name)) was rejected; its 1Password reference will be read again")
-        }
-    }
-
-    func providerRejectedKey(for provider: STTProvider) {
-        providerRejectedKey(for: provider.envKeyName)
-    }
-
-    /// Called with the HTTP status of every provider response; 401 and 403
-    /// mean the key was rejected. `providerName` is the name the request
-    /// helpers use ("OpenAI", "Grok TTS", ...).
-    func noteResponse(statusCode: Int, providerName: String) {
-        guard statusCode == 401 || statusCode == 403 else { return }
-        let first = providerName.split(separator: " ").first.map(String.init) ?? providerName
-        guard let provider = STTProvider(rawValue: first) else { return }
-        providerRejectedKey(for: provider)
-    }
-
-    /// A WebSocket that failed: its handshake response tells whether the key was rejected.
-    func noteHandshake(of task: URLSessionTask, provider: STTProvider) {
-        guard let status = (task.response as? HTTPURLResponse)?.statusCode else { return }
-        noteResponse(statusCode: status, providerName: provider.rawValue)
-    }
-
-    /// Every 1Password reference among the known key names (environment and keychain).
-    private func allReferences() -> [String] {
-        guard !testModeNoAPIKeys else { return [] }
-        let env = environment()
-        var references: [String] = []
-        for provider in STTProvider.allCases {
-            for candidate in Self.candidateNames(provider.envKeyName) {
-                for value in [env[candidate], keychain.retrieve(key: candidate)] {
-                    if let value, SecretReference.isReference(value) { references.append(value) }
-                }
-            }
-        }
-        return references
-    }
-
     // MARK: - Writing
 
     /// Saves under the canonical name. Once that succeeds, items under older
     /// names are removed, so a replaced key does not linger behind the new one.
     /// Nothing is moved on its own: this runs only when the user saves.
     func setAPIKey(_ key: String, for provider: STTProvider) throws {
+        guard Self.isUsableKey(key) else { throw KeychainError.invalidData }
         let canonical = Self.canonicalName(provider.envKeyName)
         try keychain.save(key: canonical, value: key)
         for legacy in Self.candidateNames(canonical) where legacy != canonical {
@@ -283,10 +164,9 @@ final class APIKeyManager {
         return STTProvider.allCases.first { canonicalName($0.envKeyName) == canonical }?.rawValue ?? canonical
     }
 
-    /// Reading the signal inside a view's body makes the view depend on it.
-    private func trackChanges() {
-        guard Thread.isMainThread else { return }
-        MainActor.assumeIsolated { _ = APIKeyChangeSignal.shared.revision }
+    static func isUsableKey(_ key: String) -> Bool {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && !trimmed.contains("://")
     }
 }
 

@@ -136,7 +136,6 @@ enum STTAPIHelper {
                     throw STTError.networkError(URLError(.badServerResponse))
                 }
 
-                APIKeyManager.shared.noteResponse(statusCode: httpResponse.statusCode, providerName: providerName)
 
 
                 if httpResponse.statusCode == 200 {

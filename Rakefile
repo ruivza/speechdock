@@ -329,7 +329,7 @@ namespace :docs do
   desc "Start Jekyll server for local preview (http://localhost:4000)"
   task :serve do
     puts "Starting Jekyll server..."
-    puts "Preview at: http://localhost:4000/SpeechDock/"
+    puts "Preview at: http://localhost:4000/speechdock/"
     puts "Press Ctrl+C to stop"
     puts ""
     Dir.chdir(DOCS_DIR) do
@@ -379,13 +379,11 @@ namespace :release do
     sh "chmod +x scripts/create-dmg.sh && ./scripts/create-dmg.sh"
   end
 
-  desc "Notarize DMG (requires APPLE_ID, APP_PASSWORD, TEAM_ID environment variables)"
+  desc "Notarize DMG (requires NOTARY_PROFILE)"
   task :notarize => :dmg do
     # Check for required environment variables
     missing_vars = []
-    missing_vars << "APPLE_ID" unless ENV["APPLE_ID"]
-    missing_vars << "APP_PASSWORD" unless ENV["APP_PASSWORD"]
-    missing_vars << "TEAM_ID" unless ENV["TEAM_ID"]
+    missing_vars << "NOTARY_PROFILE" if ENV["NOTARY_PROFILE"].to_s.empty?
 
     unless missing_vars.empty?
       puts ""
@@ -398,9 +396,8 @@ namespace :release do
       puts ""
       puts "Options:"
       puts "  1. Set environment variables and run again:"
-      puts "     export APPLE_ID='your-apple-id@example.com'"
-      puts "     export APP_PASSWORD='xxxx-xxxx-xxxx-xxxx'  # App-specific password"
-      puts "     export TEAM_ID='XXXXXXXXXX'"
+      puts "     xcrun notarytool store-credentials speechdock"
+      puts "     export NOTARY_PROFILE='speechdock'"
       puts "     rake release:local"
       puts ""
       puts "  2. Use GitHub Actions (recommended):"
@@ -415,7 +412,7 @@ namespace :release do
     sh "chmod +x scripts/notarize.sh && ./scripts/notarize.sh"
   end
 
-  desc "Local release (requires APPLE_ID, APP_PASSWORD, TEAM_ID env vars). Prefer release:github"
+  desc "Local release (requires NOTARY_PROFILE). Prefer release:github"
   task :local => :notarize do
     # Install to /Applications after successful notarization
     app_path = find_built_app("Release")
@@ -468,7 +465,7 @@ namespace :release do
     puts "  4. Create GitHub Release"
     puts ""
     puts "Monitor progress at:"
-    puts "  https://github.com/yohasebe/speechdock/actions"
+    puts "  https://github.com/ruivza/speechdock/actions"
     puts ""
   end
 end
@@ -629,7 +626,7 @@ namespace :dev do
 
   desc "Open documentation in browser"
   task :docs do
-    sh "open https://yohasebe.github.io/SpeechDock/"
+    sh "open https://github.com/ruivza/speechdock/blob/main/docs/index.md"
   end
 
   desc "Run app with no API keys (simulates typical user experience)"
@@ -743,7 +740,7 @@ task :help do
   puts ""
   puts "Release:"
   puts "  rake release:github   # Create release via GitHub Actions (recommended)"
-  puts "  rake release:local    # Local release (requires APPLE_ID/APP_PASSWORD/TEAM_ID env vars)"
+  puts "  rake release:local    # Local release (requires NOTARY_PROFILE)"
   puts "  rake release:dmg      # Create DMG only (no notarization)"
   puts ""
   puts "Development:"

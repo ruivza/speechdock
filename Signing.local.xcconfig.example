@@ -1,0 +1,3 @@
+// Copy to Signing.local.xcconfig and select your own team locally.
+// Signing.local.xcconfig is ignored by Git; never commit certificates or keys.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

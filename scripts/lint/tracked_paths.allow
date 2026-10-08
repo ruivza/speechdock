@@ -22,14 +22,15 @@ ExportOptions.plist
 LICENSE
 README{,_ja}.md
 Rakefile
+Signing.xcconfig
+Signing.local.xcconfig.example
 VERSION
 appcast.xml
 project.yml
 
 # --- Repository tooling -----------------------------------------------------
-.github/FUNDING.yml
 .github/workflows/*.yml
-scripts/*.{sh,swift}
+scripts/*.{sh,swift,py}
 scripts/hooks/pre-push
 scripts/lint/check_tracked_paths.rb
 scripts/lint/tracked_paths.allow
@@ -41,9 +42,13 @@ Services/**/*.swift
 Utilities/*.swift
 Views/**/*.swift
 Tests/*.swift
+InputMethod/*.swift
+InputMethod/Info.plist
+InputMethod/VoiceInput.entitlements
 
 # --- App resources ----------------------------------------------------------
 Resources/Info.plist
+Resources/container-migration.plist
 Resources/SpeechDock.entitlements
 Resources/SpeechDock.sdef
 Resources/*.lproj/{InfoPlist,Localizable}.strings
@@ -60,5 +65,5 @@ docs/{.ruby-version,Gemfile,Gemfile.lock,_config.yml,favicon.ico}
 docs/_includes/head_custom.html
 docs/_sass/custom/custom.scss
 docs/{index,basics,advanced,applescript}{,_ja}.md
+docs/{permissions,build-release}.md
 docs/images/*.png
-docs/images/architecture.{drawio,svg}

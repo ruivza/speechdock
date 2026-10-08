@@ -32,7 +32,14 @@ Package.resolved
 *.dSYM
 
 # Secrets and signing
+Signing.local.xcconfig
 secrets/
+.env
+.env.*
+*.key
+*.pem
+*.keychain
+*.keychain-db
 *.p12
 *.cer
 *.provisionprofile

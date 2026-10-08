@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: speechdock-release
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: macos-26
@@ -13,19 +17,43 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Tracked files match the allow list
         run: ruby scripts/lint/check_tracked_paths.rb
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: '26.0'
 
       - name: Get version
         id: version
-        run: echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=$(cat VERSION)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$GITHUB_REF_NAME" == "v$VERSION" ]] || {
+            echo "::error::The tag must match VERSION."
+            exit 1
+          }
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release secrets
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          for name in CERTIFICATE_BASE64 CERTIFICATE_PASSWORD KEYCHAIN_PASSWORD TEAM_ID APPLE_ID APP_PASSWORD SPARKLE_PRIVATE_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing repository secret: $name"
+              exit 1
+            fi
+          done
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -38,36 +66,57 @@ jobs:
           CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
+          umask 077
           # Create variables
-          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          trap 'rm -f "$CERTIFICATE_PATH"' EXIT
 
           # Decode certificate
-          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+          unset CERTIFICATE_BASE64
 
           # Create temporary keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           # Import certificate to keychain
           # Restrict access to codesign instead of -A (allow any application)
-          security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          unset CERTIFICATE_PASSWORD
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
 
           # Allow codesign to access the keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Select a Developer ID from the private CI keychain, never from source.
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | \
+            awk -v team="($TEAM_ID)" '/Developer ID Application:/ && index($0, team) { print $2; exit }')
+          if [[ -z "$SIGNING_IDENTITY" ]]; then
+            echo "::error::The certificate must be a Developer ID Application for TEAM_ID, with its private key."
+            exit 1
+          fi
+          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Generate Xcode project
         run: xcodegen generate
 
       - name: Build app
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
           chmod +x scripts/build.sh
           ./scripts/build.sh
+
+      - name: Verify app signatures
+        run: |
+          codesign --verify --deep --strict build/SpeechDock.app
+          codesign --verify --deep --strict build/SpeechDock.app/Contents/Resources/InputMethods/SpeechDockVoiceInput.app
 
       - name: Create DMG
         run: |
@@ -79,7 +128,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           TEAM_ID: ${{ secrets.TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          NOTARY_PROFILE: speechdock-release
+          NOTARY_KEYCHAIN: ${{ runner.temp }}/app-signing.keychain-db
         run: |
+          bash scripts/setup-notary-profile.sh
+          unset APP_PASSWORD
           chmod +x scripts/notarize.sh
           ./scripts/notarize.sh
 
@@ -88,7 +141,8 @@ jobs:
         # Used here only for the `sign_update` CLI that produces the EdDSA
         # signature embedded in appcast.xml.
         run: |
-          curl -L -o /tmp/Sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.3/Sparkle-2.9.3.tar.xz
+          curl --fail --location -o /tmp/Sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
+          echo '52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192  /tmp/Sparkle.tar.xz' | shasum -a 256 --check
           mkdir -p /tmp/Sparkle
           tar -xf /tmp/Sparkle.tar.xz -C /tmp/Sparkle
 
@@ -96,22 +150,27 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          # Get DMG filename and info (head -1 guards against multiple matches)
-          DMG_FILE=$(ls SpeechDock-*.dmg | head -1)
-          DMG_SIZE=$(stat -f%z "$DMG_FILE")
+          umask 077
           VERSION=$(cat VERSION)
+          DMG_FILE="SpeechDock-$VERSION.dmg"
+          DMG_SIZE=$(stat -f%z "$DMG_FILE")
           PUB_DATE=$(date -R)
 
           # Create temporary file with private key
           # trap ensures the key is removed even if sign_update fails
-          SPARKLE_KEY_FILE=$(mktemp /tmp/sparkle_key.XXXXXX)
+          SPARKLE_KEY_FILE=$(mktemp "$RUNNER_TEMP/sparkle_key.XXXXXX")
           trap 'rm -f "$SPARKLE_KEY_FILE"' EXIT
-          echo "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_KEY_FILE"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_KEY_FILE"
+          unset SPARKLE_PRIVATE_KEY
 
           # Sign the DMG - extract just the signature value (without attribute name)
-          RAW_SIGNATURE=$(/tmp/Sparkle/bin/sign_update "$DMG_FILE" -f "$SPARKLE_KEY_FILE" | head -1)
+          RAW_SIGNATURE=$(/tmp/Sparkle/bin/sign_update "$DMG_FILE" -f "$SPARKLE_KEY_FILE")
           # Extract the base64 signature from: sparkle:edSignature="..." length="..."
           SIGNATURE=$(echo "$RAW_SIGNATURE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+
+          # Reject a secret that does not match the public key embedded in this app.
+          xcrun swift scripts/verify-update-signature.swift "$DMG_FILE" "$SIGNATURE" \
+            build/SpeechDock.app/Contents/Info.plist
 
           # Clean up key file
           rm -f "$SPARKLE_KEY_FILE"
@@ -123,7 +182,7 @@ jobs:
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
               <channel>
                   <title>SpeechDock Updates</title>
-                  <link>https://github.com/yohasebe/speechdock</link>
+                  <link>https://github.com/${{ github.repository }}</link>
                   <description>Most recent changes with links to updates.</description>
                   <language>en</language>
                   <item>
@@ -133,7 +192,7 @@ jobs:
                       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
                       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
                       <enclosure
-                          url="https://github.com/yohasebe/speechdock/releases/download/v${VERSION}/${DMG_FILE}"
+                          url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${DMG_FILE}"
                           sparkle:edSignature="${SIGNATURE}"
                           length="${DMG_SIZE}"
                           type="application/octet-stream"/>
@@ -146,98 +205,33 @@ jobs:
           echo "Signature: $SIGNATURE"
           echo "Size: $DMG_SIZE bytes"
 
-      - name: Commit and push appcast.xml
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add appcast.xml
-          git commit -m "Update appcast.xml for v$(cat VERSION)"
-          git push origin HEAD:main
-
       - name: Create Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
-          files: SpeechDock-*.dmg
+          files: SpeechDock-${{ steps.version.outputs.VERSION }}.dmg
+          fail_on_unmatched_files: true
           generate_release_notes: true
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update Homebrew Cask
-        id: homebrew
-        # Do not fail the whole release if only the tap update fails — the DMG,
-        # appcast, and GitHub Release are already published by this point. But
-        # the outcome is surfaced by the "Verify Homebrew Cask update" step
-        # below so a failure (e.g. an expired HOMEBREW_TAP_TOKEN) is never
-        # silently swallowed.
-        continue-on-error: true
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Commit and push appcast.xml
         run: |
-          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "::error::HOMEBREW_TAP_TOKEN secret is empty or unset."
-            exit 1
-          fi
-          DMG_FILE=$(ls SpeechDock-*.dmg)
-          VERSION=$(cat VERSION)
-          SHA256=$(shasum -a 256 "$DMG_FILE" | awk '{print $1}')
-
-          # Clone homebrew-speechdock repo
-          # Pass the token via an HTTP header so it never appears in the
-          # clone URL, remote config, or git error messages
-          git clone https://github.com/yohasebe/homebrew-speechdock.git /tmp/homebrew-speechdock
-          cd /tmp/homebrew-speechdock
-          git config http.https://github.com/.extraheader \
-            "AUTHORIZATION: basic $(echo -n "x-access-token:${HOMEBREW_TAP_TOKEN}" | base64)"
-
-          # Update cask file
-          cat > Casks/speechdock.rb << CASKEOF
-          cask "speechdock" do
-            version "${VERSION}"
-            sha256 "${SHA256}"
-
-            url "https://github.com/yohasebe/speechdock/releases/download/v#{version}/SpeechDock-#{version}.dmg"
-            name "SpeechDock"
-            desc "Menu bar STT/TTS app for macOS with multiple provider support"
-            homepage "https://github.com/yohasebe/speechdock"
-
-            depends_on macos: ">= :sonoma"
-
-            app "SpeechDock.app"
-
-            zap trash: [
-              "~/Library/Preferences/com.speechdock.app.plist",
-              "~/Library/Application Support/SpeechDock",
-            ]
-          end
-          CASKEOF
-
-          # Remove leading whitespace from heredoc
-          sed -i '' 's/^          //' Casks/speechdock.rb
-
-          # Commit and push
+          # Preserve unrelated main updates made while this tag was building.
+          cp appcast.xml "$RUNNER_TEMP/appcast.xml"
+          git fetch origin main
+          git checkout -B release-feed origin/main
+          cp "$RUNNER_TEMP/appcast.xml" appcast.xml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Casks/speechdock.rb
-          git commit -m "Update SpeechDock to v${VERSION}"
-          git push
-
-      - name: Verify Homebrew Cask update
-        run: |
-          if [ "${{ steps.homebrew.outcome }}" != "success" ]; then
-            echo "::error::Homebrew Cask update FAILED (outcome: ${{ steps.homebrew.outcome }})."
-            echo "The GitHub Release and appcast.xml were published, but the Homebrew tap"
-            echo "(yohasebe/homebrew-speechdock) was NOT updated, so 'brew upgrade' users are"
-            echo "stuck on the previous version. Most likely cause: an expired or invalid"
-            echo "HOMEBREW_TAP_TOKEN secret. Regenerate the PAT (repo scope) and update the"
-            echo "repository secret, then update Casks/speechdock.rb manually for this release."
-            exit 1
-          fi
-          echo "Homebrew Cask updated successfully."
+          git add appcast.xml
+          git diff --cached --quiet && exit 0
+          git commit -m "Update appcast.xml for $GITHUB_REF_NAME"
+          git push origin HEAD:main
 
       - name: Cleanup keychain
         if: always()
         run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
-
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/certificate.p12"

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>$(VOICE_INPUT_DISPLAY_NAME)</string>
+    <key>CFBundleDisplayName</key><string>$(VOICE_INPUT_DISPLAY_NAME)</string>
+    <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+    <key>LSUIElement</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>InputMethodConnectionName</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)_Connection</string>
+    <key>InputMethodServerControllerClass</key><string>SpeechDockVoiceInputController</string>
+    <key>TISInputSourceID</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>TISIntendedLanguage</key><string>en</string>
+    <key>TISIconIsTemplate</key><true/>
+    <key>tsInputMethodIconFileKey</key><string>menubar.png</string>
+    <key>tsInputMethodCharacterRepertoireKey</key>
+    <array><string>Latn</string><string>Hans</string><string>Hant</string><string>Jpan</string><string>Kore</string></array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>SpeechDock Voice Input needs microphone access to enter dictated text in the current input field.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>SpeechDock Voice Input recognizes speech on-device to enter dictated text.</string>
+</dict>
+</plist>

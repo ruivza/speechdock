@@ -108,7 +108,6 @@ final class LLMTranslation: TranslationServiceProtocol {
 
     func isAvailable(from sourceLanguage: LanguageCode?, to targetLanguage: LanguageCode) async -> Bool {
         // LLM providers support all languages
-        // Availability only: does not read a 1Password reference.
         guard let envKey = provider.envKeyName else { return false }
         return APIKeyManager.shared.hasAPIKey(for: envKey)
     }

@@ -7,7 +7,7 @@ macOS のメニューバーから音声認識、読み上げ、字幕、OCR、�
 - [このフォークのリリース](https://github.com/ruivza/speechdock/releases)
 - [日本語の概要](docs/index_ja.md)
 - [現在の利用ガイド](docs/index.md) · [権限](docs/permissions.md) · [プライバシーとキャッシュ](docs/advanced.md)
-- [ビルドと署名](docs/build-release.md) · [中文](README.md)
+- [ビルドと署名](docs/build-release.md) · [English](README.md)
 
 アプリと Voice Input 入力メソッドは App Sandbox を使用します。通常の文字起こしはクリップボードへコピーし、ユーザーが貼り付けます。直接入力は InputMethodKit 入力メソッドを選択して行います。1Password 連携は削除しました。
 
